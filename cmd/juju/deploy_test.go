@@ -5,9 +5,11 @@ package main
 
 import (
 	"io/ioutil"
+	"net/http/httptest"
 	"strings"
 
 	"github.com/juju/errors"
+	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/utils"
 	"github.com/juju/utils/featureflag"
@@ -46,6 +48,76 @@ var _ = gc.Suite(&DeploySuite{})
 func runDeploy(c *gc.C, args ...string) error {
 	_, err := coretesting.RunCommand(c, envcmd.Wrap(&DeployCommand{}), args...)
 	return err
+}
+
+type testMetricCredentialsSetter struct {
+	assert func(string, []byte)
+}
+
+func (t *testMetricCredentialsSetter) SetMetricCredentials(serviceName string, data []byte) error {
+	t.assert(serviceName, data)
+	return nil
+}
+
+func (t *testMetricCredentialsSetter) Close() error {
+	return nil
+}
+
+func (s *DeploySuite) TestAddMetricCredentialsDefault(c *gc.C) {
+	var called bool
+	setter := &testMetricCredentialsSetter{
+		assert: func(serviceName string, data []byte) {
+			called = true
+			c.Assert(serviceName, gc.DeepEquals, "dummy")
+			c.Assert(data, gc.DeepEquals, []byte{})
+		},
+	}
+
+	cleanup := jujutesting.PatchValue(&getMetricCredentialsSetter, func(c *DeployCommand) (metricCredentialsSetter, error) {
+		return setter, nil
+	})
+	defer cleanup()
+
+	testcharms.Repo.ClonedDirPath(s.SeriesPath, "dummy")
+	err := runDeploy(c, "local:dummy")
+	c.Assert(err, jc.ErrorIsNil)
+	curl := charm.MustParseURL("local:trusty/dummy-1")
+	s.AssertService(c, "dummy", curl, 1, 0)
+	c.Assert(called, jc.IsTrue)
+}
+
+func (s *DeploySuite) TestAddMetricCredentialsHttp(c *gc.C) {
+	handler := &testMetricsRegistrationHandler{}
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	var called bool
+	setter := &testMetricCredentialsSetter{
+		assert: func(serviceName string, data []byte) {
+			called = true
+			c.Assert(serviceName, gc.DeepEquals, "dummy")
+			c.Assert(data, gc.DeepEquals, []byte("hello metrics"))
+		},
+	}
+
+	cleanup := jujutesting.PatchValue(&getMetricCredentialsSetter, func(c *DeployCommand) (metricCredentialsSetter, error) {
+		return setter, nil
+	})
+	defer cleanup()
+
+	cleanup.Add(jujutesting.PatchValue(&registerMetrics, httpMetricsRegistrar))
+	cleanup.Add(jujutesting.PatchValue(&registerMetricsURL, server.URL))
+
+	testcharms.Repo.ClonedDirPath(s.SeriesPath, "dummy")
+	err := runDeploy(c, "local:dummy")
+	c.Assert(err, jc.ErrorIsNil)
+	curl := charm.MustParseURL("local:trusty/dummy-1")
+	s.AssertService(c, "dummy", curl, 1, 0)
+	c.Assert(called, jc.IsTrue)
+
+	c.Assert(handler.registrationCalls, gc.HasLen, 1)
+	c.Assert(handler.registrationCalls[0].CharmURL, gc.DeepEquals, "local:trusty/dummy-1")
+	c.Assert(handler.registrationCalls[0].ServiceName, gc.DeepEquals, "dummy")
 }
 
 var initErrorTests = []struct {

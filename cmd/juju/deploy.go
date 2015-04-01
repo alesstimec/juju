@@ -5,7 +5,9 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/juju/cmd"
@@ -14,9 +16,11 @@ import (
 	"github.com/juju/utils/featureflag"
 	"gopkg.in/juju/charm.v5-unstable"
 	"gopkg.in/juju/charm.v5-unstable/charmrepo"
+	"gopkg.in/macaroon-bakery.v0/httpbakery"
 	"launchpad.net/gnuflag"
 
 	"github.com/juju/juju/api"
+	serviceapi "github.com/juju/juju/api/service"
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/cmd/envcmd"
 	"github.com/juju/juju/cmd/juju/block"
@@ -274,7 +278,66 @@ func (c *DeployCommand) Run(ctx *cmd.Context) error {
 			c.Constraints,
 			c.ToMachineSpec)
 	}
+
+	setter, cerr := getMetricCredentialsSetter(c)
+	if cerr != nil {
+		ctx.Infof("failed to get the metrics credentials setter: %v", cerr)
+	}
+	defer setter.Close()
+
+	credentials, err := registerMetrics("", client.EnvironmentUUID(), curl.String(), serviceName, httpbakery.NewHTTPClient(), func(url *url.URL) error {
+		cmd := exec.Command("sensible-browser", url.String())
+		return cmd.Start()
+	})
+	if err != nil {
+		ctx.Infof("failed to register metrics: %v", err)
+		return err
+	}
+	err = setter.SetMetricCredentials(serviceName, credentials)
+	if err != nil {
+		ctx.Infof("failed to set metric credentials: %v", err)
+		return err
+	}
+
 	return block.ProcessBlockedError(err, block.BlockChange)
+}
+
+type metricCredentialsSetter interface {
+	SetMetricCredentials(string, []byte) error
+	Close() error
+}
+
+var getMetricCredentialsSetter = (*DeployCommand).getMetricCredentialsSetter
+
+type serviceMetricCredentialsSetter struct {
+	api   *serviceapi.Client
+	state *api.State
+}
+
+func (s *serviceMetricCredentialsSetter) SetMetricCredentials(serviceName string, data []byte) error {
+	return s.api.SetMetricCredentials(serviceName, data)
+}
+
+func (s *serviceMetricCredentialsSetter) Close() error {
+	err := s.api.Close()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = s.state.Close()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (c *DeployCommand) getMetricCredentialsSetter() (metricCredentialsSetter, error) {
+	state, err := c.NewAPIRoot()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer state.Close()
+
+	return &serviceMetricCredentialsSetter{api: serviceapi.NewClient(state), state: state}, nil
 }
 
 // addCharmViaAPI calls the appropriate client API calls to add the
