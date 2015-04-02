@@ -14,7 +14,8 @@ import (
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
 )
 
-type metricsRegistrarFunc func(registrationUUID, environmentUUID, charmURL, serviceName string, client *http.Client, visitWebPage func(*url.URL) error) ([]byte, error)
+// TODO (alesstimec, mattyw): Add a registration uuid to the metricsRegistrarFunc.
+type metricsRegistrarFunc func(environmentUUID, charmURL, serviceName string, client *http.Client, visitWebPage func(*url.URL) error) ([]byte, error)
 
 var (
 	registerMetrics    metricsRegistrarFunc = nilMetricsRegistrar
@@ -24,28 +25,26 @@ var (
 	_ metricsRegistrarFunc = httpMetricsRegistrar
 )
 
-func nilMetricsRegistrar(_, _, _, _ string, _ *http.Client, _ func(*url.URL) error) ([]byte, error) {
+func nilMetricsRegistrar(_, _, _ string, _ *http.Client, _ func(*url.URL) error) ([]byte, error) {
 	return []byte{}, nil
 }
 
 type metricRegistrationPost struct {
-	EnvironmentUUID  string `json:"env-uuid"`
-	RegistrationUUID string `json:"sub-uuid"`
-	CharmURL         string `json:"charm-url"`
-	ServiceName      string `json:"service-name"`
+	EnvironmentUUID string `json:"env-uuid"`
+	CharmURL        string `json:"charm-url"`
+	ServiceName     string `json:"service-name"`
 }
 
-func httpMetricsRegistrar(registrationUUID, environmentUUID, charmURL, serviceName string, client *http.Client, visitWebPage func(*url.URL) error) ([]byte, error) {
+func httpMetricsRegistrar(environmentUUID, charmURL, serviceName string, client *http.Client, visitWebPage func(*url.URL) error) ([]byte, error) {
 	registerURL, err := url.Parse(registerMetricsURL)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	registrationPost := metricRegistrationPost{
-		RegistrationUUID: registrationUUID,
-		EnvironmentUUID:  environmentUUID,
-		CharmURL:         charmURL,
-		ServiceName:      serviceName,
+		EnvironmentUUID: environmentUUID,
+		CharmURL:        charmURL,
+		ServiceName:     serviceName,
 	}
 
 	buff := &bytes.Buffer{}

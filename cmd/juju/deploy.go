@@ -285,7 +285,7 @@ func (c *DeployCommand) Run(ctx *cmd.Context) error {
 	}
 	defer setter.Close()
 
-	credentials, err := registerMetrics("", client.EnvironmentUUID(), curl.String(), serviceName, httpbakery.NewHTTPClient(), func(url *url.URL) error {
+	credentials, err := registerMetrics(client.EnvironmentUUID(), curl.String(), serviceName, httpbakery.NewHTTPClient(), func(url *url.URL) error {
 		cmd := exec.Command("sensible-browser", url.String())
 		return cmd.Start()
 	})

@@ -31,7 +31,7 @@ func (s *metricsSuite) TearDownTest(c *gc.C) {
 }
 
 func (s *metricsSuite) TestNilMetricsRegistrar(c *gc.C) {
-	data, err := nilMetricsRegistrar("registration uuid", "environment uuid", "charm url", "service name", &http.Client{}, func(*url.URL) error { return nil })
+	data, err := nilMetricsRegistrar("environment uuid", "charm url", "service name", &http.Client{}, func(*url.URL) error { return nil })
 	c.Assert(err, gc.IsNil)
 	c.Assert(data, gc.DeepEquals, []byte{})
 }
@@ -40,11 +40,11 @@ func (s *metricsSuite) TestHttpMetricsRegistrar(c *gc.C) {
 	cleanup := jujutesting.PatchValue(&registerMetricsURL, s.server.URL)
 	defer cleanup()
 
-	data, err := httpMetricsRegistrar("registration uuid", "environment uuid", "charm url", "service name", &http.Client{}, func(*url.URL) error { return nil })
+	data, err := httpMetricsRegistrar("environment uuid", "charm url", "service name", &http.Client{}, func(*url.URL) error { return nil })
 	c.Assert(err, gc.IsNil)
 	c.Assert(data, gc.DeepEquals, []byte("hello metrics"))
 	c.Assert(s.handler.registrationCalls, gc.HasLen, 1)
-	c.Assert(s.handler.registrationCalls[0], gc.DeepEquals, metricRegistrationPost{RegistrationUUID: "registration uuid", EnvironmentUUID: "environment uuid", CharmURL: "charm url", ServiceName: "service name"})
+	c.Assert(s.handler.registrationCalls[0], gc.DeepEquals, metricRegistrationPost{EnvironmentUUID: "environment uuid", CharmURL: "charm url", ServiceName: "service name"})
 }
 
 type testMetricsRegistrationHandler struct {
