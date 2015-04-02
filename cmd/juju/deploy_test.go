@@ -73,7 +73,7 @@ func (s *DeploySuite) TestAddMetricCredentialsDefault(c *gc.C) {
 		},
 	}
 
-	cleanup := jujutesting.PatchValue(&getMetricCredentialsSetter, func(c *DeployCommand) (metricCredentialsSetter, error) {
+	cleanup := jujutesting.PatchValue(&getMetricCredentialsAPI, func(c *DeployCommand) (metricCredentialsAPI, error) {
 		return setter, nil
 	})
 	defer cleanup()
@@ -100,7 +100,7 @@ func (s *DeploySuite) TestAddMetricCredentialsHttp(c *gc.C) {
 		},
 	}
 
-	cleanup := jujutesting.PatchValue(&getMetricCredentialsSetter, func(c *DeployCommand) (metricCredentialsSetter, error) {
+	cleanup := jujutesting.PatchValue(&getMetricCredentialsAPI, func(c *DeployCommand) (metricCredentialsAPI, error) {
 		return setter, nil
 	})
 	defer cleanup()

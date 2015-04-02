@@ -279,7 +279,7 @@ func (c *DeployCommand) Run(ctx *cmd.Context) error {
 			c.ToMachineSpec)
 	}
 
-	setter, cerr := getMetricCredentialsSetter(c)
+	setter, cerr := getMetricCredentialsAPI(c)
 	if cerr != nil {
 		ctx.Infof("failed to get the metrics credentials setter: %v", cerr)
 	}
@@ -302,23 +302,23 @@ func (c *DeployCommand) Run(ctx *cmd.Context) error {
 	return block.ProcessBlockedError(err, block.BlockChange)
 }
 
-type metricCredentialsSetter interface {
+type metricCredentialsAPI interface {
 	SetMetricCredentials(string, []byte) error
 	Close() error
 }
 
-var getMetricCredentialsSetter = (*DeployCommand).getMetricCredentialsSetter
+var getMetricCredentialsAPI = (*DeployCommand).getMetricCredentialsAPI
 
-type serviceMetricCredentialsSetter struct {
+type metricsCredentialsAPIImpl struct {
 	api   *serviceapi.Client
 	state *api.State
 }
 
-func (s *serviceMetricCredentialsSetter) SetMetricCredentials(serviceName string, data []byte) error {
+func (s *metricsCredentialsAPIImpl) SetMetricCredentials(serviceName string, data []byte) error {
 	return s.api.SetMetricCredentials(serviceName, data)
 }
 
-func (s *serviceMetricCredentialsSetter) Close() error {
+func (s *metricsCredentialsAPIImpl) Close() error {
 	err := s.api.Close()
 	if err != nil {
 		return errors.Trace(err)
@@ -330,14 +330,14 @@ func (s *serviceMetricCredentialsSetter) Close() error {
 	return nil
 }
 
-func (c *DeployCommand) getMetricCredentialsSetter() (metricCredentialsSetter, error) {
+func (c *DeployCommand) getMetricCredentialsAPI() (metricCredentialsAPI, error) {
 	state, err := c.NewAPIRoot()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	defer state.Close()
 
-	return &serviceMetricCredentialsSetter{api: serviceapi.NewClient(state), state: state}, nil
+	return &metricsCredentialsAPIImpl{api: serviceapi.NewClient(state), state: state}, nil
 }
 
 // addCharmViaAPI calls the appropriate client API calls to add the
