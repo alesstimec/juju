@@ -225,10 +225,16 @@ func (s serviceStatus) GetYAML() (tag string, value interface{}) {
 	return "", ssNoMethods(s)
 }
 
+type meterStatus struct {
+	Color   string `json:"color,omitempty" yaml:"color,omitempty"`
+	Message string `json:"message,omitempty" yaml:"message,omitempty"`
+}
+
 type unitStatus struct {
 	// New Juju Health Status fields.
 	WorkloadStatusInfo statusInfoContents `json:"workload-status,omitempty" yaml:"workload-status,omitempty"`
 	AgentStatusInfo    statusInfoContents `json:"agent-status,omitempty" yaml:"agent-status,omitempty"`
+	MeterStatus        *meterStatus       `json:"meter-status,omitempty" yaml:"meter-status,omitempty"`
 
 	// Legacy status fields, to be removed in Juju 2.0
 	AgentState     params.Status `json:"agent-state,omitempty" yaml:"agent-state,omitempty"`
@@ -427,7 +433,7 @@ func (sf *statusFormatter) formatService(name string, service api.ServiceStatus)
 		out.Networks["disabled"] = service.Networks.Disabled
 	}
 	for k, m := range service.Units {
-		out.Units[k] = sf.formatUnit(m, name)
+		out.Units[k] = sf.formatUnit(m, service.MeterStatuses, k, name)
 	}
 	return out
 }
@@ -445,7 +451,7 @@ func (sf *statusFormatter) getServiceStatusInfo(service api.ServiceStatus) statu
 	return info
 }
 
-func (sf *statusFormatter) formatUnit(unit api.UnitStatus, serviceName string) unitStatus {
+func (sf *statusFormatter) formatUnit(unit api.UnitStatus, meterStatuses map[string]api.MeterStatus, unitName, serviceName string) unitStatus {
 	// TODO(Wallyworld) - this should be server side but we still need to support older servers.
 	sf.updateUnitStatusInfo(&unit, serviceName)
 
@@ -459,6 +465,13 @@ func (sf *statusFormatter) formatUnit(unit api.UnitStatus, serviceName string) u
 		Subordinates:       make(map[string]unitStatus),
 	}
 
+	if ms, ok := meterStatuses[unitName]; ok {
+		out.MeterStatus = &meterStatus{
+			Color:   ms.Color,
+			Message: ms.Message,
+		}
+	}
+
 	// These legacy fields will be dropped for Juju 2.0.
 	if sf.compatVersion < 2 || out.AgentStatusInfo.Current == "" {
 		out.Err = unit.Err
@@ -469,7 +482,7 @@ func (sf *statusFormatter) formatUnit(unit api.UnitStatus, serviceName string) u
 	}
 
 	for k, m := range unit.Subordinates {
-		out.Subordinates[k] = sf.formatUnit(m, serviceName)
+		out.Subordinates[k] = sf.formatUnit(m, meterStatuses, k, serviceName)
 	}
 	return out
 }
