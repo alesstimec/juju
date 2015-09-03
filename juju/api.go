@@ -6,12 +6,17 @@ package juju
 import (
 	"fmt"
 	"io"
+	"os"
+	"path"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/juju/loggo"
 	"github.com/juju/names"
+	"github.com/juju/persistent-cookiejar"
+	"github.com/juju/utils"
 	"github.com/juju/utils/parallel"
+	"gopkg.in/macaroon-bakery.v1/httpbakery"
 
 	"github.com/juju/juju/api"
 	"github.com/juju/juju/environs"
@@ -137,7 +142,7 @@ func newAPIFromStore(envName string, store configstore.Storage, apiOpen api.Open
 		if errorImportance(err0) < errorImportance(err1) {
 			err0, err1 = err1, err0
 		}
-		logger.Warningf("discarding API open error: %v", err1)
+		logger.Warningf("XXX discarding API open error: %v", errors.ErrorStack(err1))
 		return err0
 	}
 	try := parallel.NewTry(0, chooseError)
@@ -245,15 +250,25 @@ type infoConnectError struct {
 	error
 }
 
-func environInfoUserTag(info configstore.EnvironInfo) names.UserTag {
+func environInfoUserTag(info configstore.EnvironInfo) names.Tag {
 	var username string
 	if info != nil {
 		username = info.APICredentials().User
 	}
 	if username == "" {
-		username = configstore.DefaultAdminUsername
+		return nil
 	}
 	return names.NewUserTag(username)
+}
+
+// cookieFile returns the path to the cookie used to store authorization
+// macaroons. The returned value can be overridden by setting the
+// JUJU_COOKIEFILE environment variable.
+func cookieFile() string {
+	if file := os.Getenv("JUJU_COOKIEFILE"); file != "" {
+		return file
+	}
+	return path.Join(utils.Home(), ".go-cookies")
 }
 
 // apiInfoConnect looks for endpoint on the given environment and
@@ -276,7 +291,36 @@ func apiInfoConnect(info configstore.EnvironInfo, apiOpen api.OpenFunc, stop <-c
 		Password:   info.APICredentials().Password,
 		EnvironTag: environTag,
 	}
-	st, err := apiOpen(apiInfo, api.DefaultDialOpts())
+	if apiInfo.Tag == nil {
+		apiInfo.UseMacaroons = true
+	}
+
+	dialOpts := api.DefaultDialOpts()
+
+	client := httpbakery.NewClient()
+	client.VisitWebPage = httpbakery.OpenWebBrowser
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		// Failure to create a cookiejar is not a catastrophic failure
+		// because we can still run the command, but the user might be asked
+		// to log in multiple times - we log the error, so that the user can
+		// fix whatever is causing it, before running the command again.
+		logger.Infof("failed to create a new cookiejar: %v", err)
+	} else {
+		err := jar.Load(cookieFile())
+		if err != nil {
+			// If we fail to load cookies, we can still run the command, but
+			// the user will most likely be asked to log in again -  we do
+			// log the error enabling the user to fix whatever is causing it.
+			logger.Infof("cannot load cookies: %v", err)
+		}
+		defer jar.Save()
+
+		client.Jar = jar
+	}
+	dialOpts.BakeryClient = client
+
+	st, err := apiOpen(apiInfo, dialOpts)
 	if err != nil {
 		return nil, &infoConnectError{err}
 	}
@@ -288,7 +332,7 @@ func apiInfoConnect(info configstore.EnvironInfo, apiOpen api.OpenFunc, stop <-c
 // its endpoint. It only starts the attempt after the given delay,
 // to allow the faster apiInfoConnect to hopefully succeed first.
 // It returns nil if there was no configuration information found.
-func apiConfigConnect(cfg *config.Config, apiOpen api.OpenFunc, stop <-chan struct{}, delay time.Duration, user names.UserTag) (api.Connection, error) {
+func apiConfigConnect(cfg *config.Config, apiOpen api.OpenFunc, stop <-chan struct{}, delay time.Duration, user names.Tag) (api.Connection, error) {
 	select {
 	case <-time.After(delay):
 	case <-stop:
@@ -330,7 +374,7 @@ func getConfig(info configstore.EnvironInfo, envs *environs.Environs, envName st
 	return nil, errors.NotFoundf("environment %q", envName)
 }
 
-func environAPIInfo(environ environs.Environ, user names.UserTag) (*api.Info, error) {
+func environAPIInfo(environ environs.Environ, user names.Tag) (*api.Info, error) {
 	config := environ.Config()
 	password := config.AdminSecret()
 	if password == "" {
