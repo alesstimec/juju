@@ -22,6 +22,7 @@ import (
 	"github.com/juju/utils"
 	"github.com/juju/utils/clock"
 	"github.com/juju/utils/featureflag"
+	"github.com/juju/utils/series"
 	"github.com/juju/utils/set"
 	"github.com/juju/utils/symlink"
 	"github.com/juju/utils/voyeur"
@@ -53,7 +54,6 @@ import (
 	"github.com/juju/juju/instance"
 	jujunames "github.com/juju/juju/juju/names"
 	"github.com/juju/juju/juju/paths"
-	"github.com/juju/juju/juju/series"
 	"github.com/juju/juju/mongo"
 	"github.com/juju/juju/network"
 	"github.com/juju/juju/provider"
@@ -1054,6 +1054,12 @@ func (a *MachineAgent) StateWorker() (worker.Worker, error) {
 			a.startWorkerAfterUpgrade(runner, "restore", func() (worker.Worker, error) {
 				return a.newRestoreStateWatcherWorker(st)
 			})
+
+			// certChangedChan is shared by multiple workers it's up
+			// to the agent to close it rather than any one of the
+			// workers.
+			//
+			// TODO(ericsnow) For now we simply do not close the channel.
 			certChangedChan := make(chan params.StateServingInfo, 1)
 			runner.StartWorker("apiserver", a.apiserverWorkerStarter(st, certChangedChan))
 			var stateServingSetter certupdater.StateServingInfoSetter = func(info params.StateServingInfo, done <-chan struct{}) error {
@@ -1069,7 +1075,7 @@ func (a *MachineAgent) StateWorker() (worker.Worker, error) {
 				})
 			}
 			a.startWorkerAfterUpgrade(runner, "certupdater", func() (worker.Worker, error) {
-				return newCertificateUpdater(m, agentConfig, st, st, stateServingSetter, certChangedChan), nil
+				return newCertificateUpdater(m, agentConfig, st, st, stateServingSetter), nil
 			})
 
 			if feature.IsDbLogEnabled() {

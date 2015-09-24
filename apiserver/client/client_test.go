@@ -1050,14 +1050,14 @@ func (s *clientSuite) TestClientCharmInfo(c *gc.C) {
 			charm:           "wordpress",
 			expectedActions: &charm.Actions{ActionSpecs: nil},
 			url:             "not-valid",
-			err:             "entity url series is not resolved",
+			err:             "charm or bundle url series is not resolved",
 		},
 		{
 			about:           "invalid schema",
 			charm:           "wordpress",
 			expectedActions: &charm.Actions{ActionSpecs: nil},
 			url:             "not-valid:your-arguments",
-			err:             `entity URL has invalid schema: "not-valid:your-arguments"`,
+			err:             `charm or bundle URL has invalid schema: "not-valid:your-arguments"`,
 		},
 		{
 			about:           "unknown charm",
@@ -1625,8 +1625,8 @@ func (s *clientRepoSuite) TearDownTest(c *gc.C) {
 
 func (s *clientRepoSuite) TestClientServiceDeployCharmErrors(c *gc.C) {
 	for url, expect := range map[string]string{
-		"wordpress":                   "entity url series is not resolved",
-		"cs:wordpress":                "entity url series is not resolved",
+		"wordpress":                   "charm or bundle url series is not resolved",
+		"cs:wordpress":                "charm or bundle url series is not resolved",
 		"cs:precise/wordpress":        "charm url must include revision",
 		"cs:precise/wordpress-999999": `cannot retrieve "cs:precise/wordpress-999999": charm not found`,
 	} {
@@ -1921,8 +1921,8 @@ func (s *clientRepoSuite) TestBlockServiceUpdateForced(c *gc.C) {
 func (s *clientRepoSuite) TestClientServiceUpdateSetCharmErrors(c *gc.C) {
 	s.AddTestingService(c, "wordpress", s.AddTestingCharm(c, "wordpress"))
 	for charmUrl, expect := range map[string]string{
-		"wordpress":                   "entity url series is not resolved",
-		"cs:wordpress":                "entity url series is not resolved",
+		"wordpress":                   "charm or bundle url series is not resolved",
+		"cs:wordpress":                "charm or bundle url series is not resolved",
 		"cs:precise/wordpress":        "charm url must include revision",
 		"cs:precise/wordpress-999999": `cannot retrieve "cs:precise/wordpress-999999": charm not found`,
 	} {
@@ -2209,8 +2209,8 @@ func (s *clientRepoSuite) TestClientServiceSetCharmErrors(c *gc.C) {
 	s.AddTestingService(c, "wordpress", s.AddTestingCharm(c, "wordpress"))
 	for url, expect := range map[string]string{
 		// TODO(fwereade,Makyo) make these errors consistent one day.
-		"wordpress":                   "entity url series is not resolved",
-		"cs:wordpress":                "entity url series is not resolved",
+		"wordpress":                   "charm or bundle url series is not resolved",
+		"cs:wordpress":                "charm or bundle url series is not resolved",
 		"cs:precise/wordpress":        "charm url must include revision",
 		"cs:precise/wordpress-999999": `cannot retrieve "cs:precise/wordpress-999999": charm not found`,
 	} {
@@ -3281,7 +3281,7 @@ var resolveCharmTests = []struct {
 }, {
 	about:    "invalid charm name",
 	url:      "cs:",
-	parseErr: `entity URL has invalid entity name: "cs:"`,
+	parseErr: `URL has invalid charm or bundle name: "cs:"`,
 }, {
 	about:      "local charm",
 	url:        "local:wordpress",
