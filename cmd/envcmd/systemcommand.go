@@ -217,7 +217,7 @@ func (w *sysCommandWrapper) Init(args []string) error {
 			return ErrNoSystemSpecified
 		}
 	}
-	w.SetSystemName(w.systemName)
+	w.SystemCommand.SetSystemName(w.systemName)
 	return w.SystemCommand.Init(args)
 }
 

@@ -377,7 +377,7 @@ func (w *environCommandWrapper) Init(args []string) error {
 			}
 		}
 	}
-	w.SetEnvName(w.envName)
+	w.EnvironCommand.SetEnvName(w.envName)
 	return w.EnvironCommand.Init(args)
 }
 
