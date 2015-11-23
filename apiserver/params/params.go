@@ -804,3 +804,20 @@ type BundleChangesChange struct {
 	// before this change is applied.
 	Requires []string `json:"requires"`
 }
+
+func NewInteractionRequired(url string) *interactionRequired {
+	return &interactionRequired{VisitURL: url}
+}
+
+type interactionRequired struct {
+	VisitURL string
+}
+
+func (e *interactionRequired) Error() string {
+	return e.VisitURL
+}
+
+func IsInteractionRequired(err error) bool {
+	_, ok := err.(*interactionRequired)
+	return ok
+}
