@@ -6,6 +6,7 @@ package commands
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/juju/cmd"
 	"github.com/juju/errors"
@@ -231,8 +232,14 @@ func (c *csClient) authorize(curl *charm.URL) (*macaroon.Macaroon, error) {
 		HTTPClient:   c.params.HTTPClient,
 		VisitWebPage: c.params.VisitWebPage,
 	})
+	endpoint := "/delegatable-macaroon"
+	if curl != nil {
+		query := url.Values{}
+		query.Add("id", curl.String())
+		endpoint = endpoint + "?" + query.Encode()
+	}
 	var m *macaroon.Macaroon
-	if err := client.Get("/delegatable-macaroon", &m); err != nil {
+	if err := client.Get(endpoint, &m); err != nil {
 		return nil, errors.Trace(err)
 	}
 	if err := m.AddFirstPartyCaveat("is-entity " + curl.String()); err != nil {
