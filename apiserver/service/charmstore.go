@@ -87,6 +87,13 @@ func AddCharmWithAuthorization(st *state.State, args params.AddCharmWithAuthoriz
 	downloadedCharm, err := repo.Get(charmURL)
 	if err != nil {
 		cause := errors.Cause(err)
+		if httpbakery.IsDischargeError(cause) {
+			derr, ok := cause.(*httpbakery.DischargeError)
+			if ok {
+				params.NewInteractionRequired(derr.Reason.Info.VisitURL)
+			}
+			return errors.NewUnauthorized(err, "")
+		}
 		if httpbakery.IsDischargeError(cause) || httpbakery.IsInteractionError(cause) {
 			return errors.NewUnauthorized(err, "")
 		}

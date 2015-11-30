@@ -185,6 +185,14 @@ func addCharmFromURL(client *api.Client, curl *charm.URL, repo charmrepo.Interfa
 		curl = stateCurl
 	case "cs":
 		if err := client.AddCharm(curl); err != nil {
+			if !params.IsInteractionRequired(err) {
+				visitURL, err := url.Parse(err.Error())
+				if err != nil {
+					return nil, errors.Mask(err)
+				}
+				err = httpbakery.OpenWebBrowser(visitURL)
+				return nil, errors.Mask(err)
+			}
 			if !params.IsCodeUnauthorized(err) {
 				return nil, errors.Mask(err)
 			}
