@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/juju/cmd"
 	"github.com/juju/errors"
@@ -167,6 +168,34 @@ func isSeriesSupported(requestedSeries string, supportedSeries []string) bool {
 	return false
 }
 
+func isTermAgreementRequired(err error) ([]string, bool) {
+	e, ok := err.(*httpbakery.DischargeError)
+	if !ok {
+		return nil, false
+	}
+	if e.Reason == nil {
+		return nil, false
+	}
+	code := "term agreement required"
+	if e.Reason.Code != httpbakery.ErrorCode(code) {
+		return nil, false
+	}
+	magicMarker := code + ":"
+	index := strings.LastIndex(e.Reason.Message, magicMarker)
+	if index == -1 {
+		return nil, false
+	}
+	return strings.Fields(e.Reason.Message[index+len(magicMarker):]), true
+}
+
+type termsRequiredError struct {
+	Terms []string
+}
+
+func (e *termsRequiredError) Error() string {
+	return fmt.Sprintf("please agree to terms %q", strings.Join(e.Terms, " "))
+}
+
 // addCharmFromURL calls the appropriate client API calls to add the
 // given charm URL to state. For non-public charm URLs, this function also
 // handles the macaroon authorization process using the given csClient.
@@ -194,14 +223,21 @@ func addCharmFromURL(client *api.Client, curl *charm.URL, repo charmrepo.Interfa
 				return nil, errors.Mask(err)
 			}
 			if !params.IsCodeUnauthorized(err) {
-				return nil, errors.Mask(err)
+				return nil, errors.Trace(err)
 			}
 			m, err := csclient.authorize(curl)
 			if err != nil {
-				return nil, errors.Mask(err)
+				if err1, ok := err.(*errors.Err); ok {
+					if httpbakery.IsDischargeError(err1.Cause()) {
+						if terms, required := isTermAgreementRequired(err1.Cause()); required {
+							return nil, &termsRequiredError{terms}
+						}
+					}
+				}
+				return nil, errors.Trace(err)
 			}
 			if err := client.AddCharmWithAuthorization(curl, m); err != nil {
-				return nil, errors.Mask(err)
+				return nil, errors.Trace(err)
 			}
 		}
 	default:
