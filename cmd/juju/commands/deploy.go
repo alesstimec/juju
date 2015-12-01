@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/juju/cmd"
 	"github.com/juju/errors"
@@ -334,6 +335,10 @@ func (c *DeployCommand) deployCharmOrBundle(ctx *cmd.Context, client *api.Client
 	// Handle a charm.
 	curl, err := addCharmFromURL(client, charmOrBundleURL, repo, csClient)
 	if err != nil {
+		if err1, ok := err.(*termsRequiredError); ok {
+			terms := strings.Join(err1.Terms, " ")
+			return errors.Errorf(`Declined: please agree to the following terms %s. Try: "juju agree %s"`, terms, terms)
+		}
 		return errors.Trace(err)
 	}
 	ctx.Infof("Added charm %q to the environment.", curl)
