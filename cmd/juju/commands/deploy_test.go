@@ -598,6 +598,34 @@ func (s *DeployCharmStoreSuite) TestDeployAuthorization(c *gc.C) {
 	}
 }
 
+func (s *DeployCharmStoreSuite) TestDeployWithTermsSuccess(c *gc.C) {
+	testcharms.UploadCharm(c, s.client, "trusty/terms1-1", "terms1")
+	output, err := runDeployCommand(c, "trusty/terms1")
+	c.Assert(err, jc.ErrorIsNil)
+	expectedOutput := `
+Added charm "cs:trusty/terms1-1" to the environment.
+`
+	c.Assert(output, gc.Equals, strings.TrimSpace(expectedOutput))
+	s.assertCharmsUplodaded(c, "cs:trusty/terms1-1")
+	s.assertServicesDeployed(c, map[string]serviceInfo{
+		"terms1": {charm: "cs:trusty/terms1-1"},
+	})
+	_, err = s.State.Unit("terms1/0")
+	c.Assert(err, jc.ErrorIsNil)
+}
+
+func (s *DeployCharmStoreSuite) TestDeployWithTermsNotSigned(c *gc.C) {
+	s.termsDischargerError = &httpbakery.Error{
+		Message: "term agreement required: term/1 term/2",
+		Code:    "term agreement required",
+	}
+	testcharms.UploadCharm(c, s.client, "quantal/terms1-1", "terms1")
+	_, err := runDeployCommand(c, "quantal/terms1")
+	//c.Assert(err, gc.ErrorMatches, "")
+	expectedError := `Declined: please agree to the following terms term/1 term/2. Try: "juju agree term/1 term/2"`
+	c.Assert(err, gc.ErrorMatches, expectedError)
+}
+
 const (
 	// clientUserCookie is the name of the cookie which is
 	// used to signal to the charmStoreSuite macaroon discharger
@@ -613,12 +641,13 @@ const (
 // place to allow testing code that calls addCharmViaAPI.
 type charmStoreSuite struct {
 	testing.JujuConnSuite
-	handler         charmstore.HTTPCloseHandler
-	srv             *httptest.Server
-	client          *csclient.Client
-	discharger      *bakerytest.Discharger
-	termsDischarger *bakerytest.Discharger
-	termsString     string
+	handler              charmstore.HTTPCloseHandler
+	srv                  *httptest.Server
+	client               *csclient.Client
+	discharger           *bakerytest.Discharger
+	termsDischarger      *bakerytest.Discharger
+	termsDischargerError error
+	termsString          string
 }
 
 func (s *charmStoreSuite) SetUpTest(c *gc.C) {
@@ -635,10 +664,11 @@ func (s *charmStoreSuite) SetUpTest(c *gc.C) {
 		}, nil
 	})
 
+	s.termsDischargerError = nil
 	// Set up the third party terms discharger.
 	s.termsDischarger = bakerytest.NewDischarger(nil, func(req *http.Request, cond string, arg string) ([]checkers.Caveat, error) {
 		s.termsString = arg
-		return nil, nil
+		return nil, s.termsDischargerError
 	})
 	s.termsString = ""
 
