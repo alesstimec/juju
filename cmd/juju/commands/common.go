@@ -168,24 +168,27 @@ func isSeriesSupported(requestedSeries string, supportedSeries []string) bool {
 	return false
 }
 
-func isTermAgreementRequired(err error) ([]string, bool) {
+// termsAgreementError returns err as a *termsAgreementError
+// if it has a "terms agreement request" error code, otherwise
+// it returns err unchanged.
+func termsAgreementError(err error) error {
 	e, ok := err.(*httpbakery.DischargeError)
 	if !ok {
-		return nil, false
+		return nil
 	}
 	if e.Reason == nil {
-		return nil, false
+		return err
 	}
 	code := "term agreement required"
 	if e.Reason.Code != httpbakery.ErrorCode(code) {
-		return nil, false
+		return err
 	}
 	magicMarker := code + ":"
 	index := strings.LastIndex(e.Reason.Message, magicMarker)
 	if index == -1 {
-		return nil, false
+		return err
 	}
-	return strings.Fields(e.Reason.Message[index+len(magicMarker):]), true
+	return &termsRequiredError{strings.Fields(e.Reason.Message[index+len(magicMarker):])}
 }
 
 type termsRequiredError struct {
@@ -214,27 +217,12 @@ func addCharmFromURL(client *api.Client, curl *charm.URL, repo charmrepo.Interfa
 		curl = stateCurl
 	case "cs":
 		if err := client.AddCharm(curl); err != nil {
-			if !params.IsInteractionRequired(err) {
-				visitURL, err := url.Parse(err.Error())
-				if err != nil {
-					return nil, errors.Mask(err)
-				}
-				err = httpbakery.OpenWebBrowser(visitURL)
-				return nil, errors.Mask(err)
-			}
 			if !params.IsCodeUnauthorized(err) {
 				return nil, errors.Trace(err)
 			}
 			m, err := csclient.authorize(curl)
 			if err != nil {
-				if err1, ok := err.(*errors.Err); ok {
-					if httpbakery.IsDischargeError(err1.Cause()) {
-						if terms, required := isTermAgreementRequired(err1.Cause()); required {
-							return nil, &termsRequiredError{terms}
-						}
-					}
-				}
-				return nil, errors.Trace(err)
+				return nil, termsAgreementError(errors.Cause(err))
 			}
 			if err := client.AddCharmWithAuthorization(curl, m); err != nil {
 				return nil, errors.Trace(err)

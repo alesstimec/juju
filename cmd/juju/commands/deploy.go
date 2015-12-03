@@ -353,7 +353,7 @@ func (c *DeployCommand) deployCharmOrBundle(ctx *cmd.Context, client *api.Client
 	// Store the charm in state.
 	curl, err := addCharmFromURL(client, charmOrBundleURL, repo, csClient)
 	if err != nil {
-		if err1, ok := err.(*termsRequiredError); ok {
+		if err1, ok := errors.Cause(err).(*termsRequiredError); ok {
 			terms := strings.Join(err1.Terms, " ")
 			return errors.Errorf(`Declined: please agree to the following terms %s. Try: "juju agree %s"`, terms, terms)
 		}
