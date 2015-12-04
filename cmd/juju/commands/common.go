@@ -174,7 +174,7 @@ func isSeriesSupported(requestedSeries string, supportedSeries []string) bool {
 func termsAgreementError(err error) error {
 	e, ok := err.(*httpbakery.DischargeError)
 	if !ok {
-		return nil
+		return err
 	}
 	if e.Reason == nil {
 		return err
