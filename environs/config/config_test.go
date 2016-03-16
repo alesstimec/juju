@@ -973,6 +973,42 @@ var configTests = []configTest{
 		err: `resource-tags: expected "key=value", got "a"`,
 	},
 	{
+		about:       "Invalid rsyslog URL value",
+		useDefaults: config.UseDefaults,
+		attrs: testing.Attrs{
+			"type":        "my-type",
+			"name":        "my-name",
+			"rsyslog-url": "%",
+		},
+		err: `invalid rsyslog URL: parse %: invalid URL escape "%"`,
+	}, {
+		about:       "Invalid rsyslog url schema",
+		useDefaults: config.UseDefaults,
+		attrs: testing.Attrs{
+			"type":        "my-type",
+			"name":        "my-name",
+			"rsyslog-url": "http://localhost:1234",
+		},
+		err: "rsyslog URL needs to be https",
+	}, {
+		about:       "Invalid rsyslog cert format",
+		useDefaults: config.UseDefaults,
+		attrs: testing.Attrs{
+			"type":            "my-type",
+			"name":            "my-name",
+			"rsyslog-ca-cert": "abc",
+		},
+		err: "invalid rsyslog CA certificate: no certificates found",
+	}, {
+		about:       "Valid rsyslog config values",
+		useDefaults: config.UseDefaults,
+		attrs: testing.Attrs{
+			"type":            "my-type",
+			"name":            "my-name",
+			"rsyslog-url":     "https://localhost:1234",
+			"rsyslog-ca-cert": caCert,
+		},
+	}, {
 		about:       "Invalid identity URL value",
 		useDefaults: config.UseDefaults,
 		attrs: testing.Attrs{
@@ -1264,6 +1300,15 @@ func (test configTest) check(c *gc.C, home *gitjujutesting.FakeHome) {
 	} else {
 		// Content of all the files that are read by default.
 		c.Assert(cfg.AuthorizedKeys(), gc.Equals, "dsa\nrsa\nidentity\n")
+	}
+
+	rsyslogCACert, rsyslogCACertPresent := cfg.RsyslogCACert()
+	if v, ok := test.attrs["rsyslog-ca-cert"].(string); v != "" {
+		c.Assert(rsyslogCACertPresent, jc.IsTrue)
+		c.Assert(string(rsyslogCACert), gc.Equals, v)
+	} else if ok {
+		c.Check(rsyslogCACert, gc.HasLen, 0)
+		c.Assert(rsyslogCACertPresent, jc.IsFalse)
 	}
 
 	cert, certPresent := cfg.CACert()

@@ -174,6 +174,13 @@ const (
 	// is primarily for enabling Juju to work cleanly in a closed network.
 	CloudImageBaseURL = "cloudimg-base-url"
 
+	// RsyslogURL sets the url of the rsyslog server.
+	RsyslogURL = "rsyslog-url"
+
+	// RsyslogCACert sets the certificate of the CA that signed the rsyslog
+	// server certificate.
+	RsyslogCACert = "rsyslog-ca-cert"
+
 	// IdentityURL sets the url of the identity manager.
 	IdentityURL = "identity-url"
 
@@ -603,6 +610,24 @@ func Validate(cfg, old *Config) error {
 		}
 	}
 
+	if v, ok := cfg.defined[RsyslogURL].(string); ok {
+		u, err := url.Parse(v)
+		if err != nil {
+			return fmt.Errorf("invalid rsyslog URL: %v", err)
+		}
+		if u.Scheme != "https" {
+			return fmt.Errorf("rsyslog URL needs to be https")
+		}
+
+	}
+	rsyslogCACert, rsyslogCACertOK := cfg.RsyslogCACert()
+	if rsyslogCACertOK {
+		logger.Errorf("XXX %v", rsyslogCACert)
+		if _, err := cert.ParseCert(rsyslogCACert); err != nil {
+			return errors.Annotate(err, "invalid rsyslog CA certificate")
+		}
+	}
+
 	if v, ok := cfg.defined[IdentityURL].(string); ok {
 		u, err := url.Parse(v)
 		if err != nil {
@@ -983,6 +1008,24 @@ func (c *Config) CAPrivateKey() (key string, ok bool) {
 	return "", false
 }
 
+// RsyslogURL returns the URL of the rsyslog server.
+func (c *Config) RsyslogURL() (string, bool) {
+	if s, ok := c.defined[RsyslogURL]; ok && s != "" {
+		return s.(string), true
+	}
+	return "", false
+}
+
+// RsyslogCACert returns the certificate of the CA that signed the
+// rsyslog server certificate, in PEM format, and whether the
+// config value is available.
+func (c *Config) RsyslogCACert() (string, bool) {
+	if s, ok := c.defined[RsyslogCACert]; ok && s != "" {
+		return s.(string), true
+	}
+	return "", false
+}
+
 // AdminSecret returns the administrator password.
 // It's empty if the password has not been set.
 func (c *Config) AdminSecret() string {
@@ -1302,8 +1345,8 @@ var alwaysOptional = schema.Defaults{
 	"bootstrap-timeout":          schema.Omit,
 	"bootstrap-retry-delay":      schema.Omit,
 	"bootstrap-addresses-delay":  schema.Omit,
-	"rsyslog-ca-cert":            schema.Omit,
-	"rsyslog-ca-key":             schema.Omit,
+	RsyslogURL:                   schema.Omit,
+	RsyslogCACert:                schema.Omit,
 	HttpProxyKey:                 schema.Omit,
 	HttpsProxyKey:                schema.Omit,
 	FtpProxyKey:                  schema.Omit,
@@ -1835,13 +1878,13 @@ global or per instance security groups.`,
 		Type:        environschema.Tattrs,
 		Group:       environschema.EnvironGroup,
 	},
-	"rsyslog-ca-cert": {
-		Description: `The certificate of the CA that signed the rsyslog certificate, in PEM format.`,
+	RsyslogURL: {
+		Description: `RsyslogURL specifies the URL of the rsyslog server.`,
 		Type:        environschema.Tstring,
 		Group:       environschema.EnvironGroup,
 	},
-	"rsyslog-ca-key": {
-		Description: `The private key of the CA that signed the rsyslog certificate, in PEM format`,
+	RsyslogCACert: {
+		Description: `The certificate of the CA that signed the rsyslog certificate, in PEM format.`,
 		Type:        environschema.Tstring,
 		Group:       environschema.EnvironGroup,
 	},

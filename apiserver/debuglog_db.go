@@ -4,6 +4,7 @@
 package apiserver
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -24,7 +25,10 @@ func handleDebugLogDBRequest(
 	stop <-chan struct{},
 ) error {
 	params := makeLogTailerParams(reqParams)
-	tailer := newLogTailer(st, params)
+	tailer, err := newLogTailer(st, params)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	defer tailer.Stop()
 
 	// Indicate that all is well.
@@ -40,8 +44,11 @@ func handleDebugLogDBRequest(
 				return errors.Annotate(tailer.Err(), "tailer stopped")
 			}
 
-			line := formatLogRecord(rec)
-			_, err := socket.Write([]byte(line))
+			line, err := formatLogRecord(rec, reqParams.jsonFormat)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			_, err = socket.Write([]byte(line))
 			if err != nil {
 				return errors.Annotate(err, "sending failed")
 			}
@@ -70,15 +77,22 @@ func makeLogTailerParams(reqParams *debugLogParams) *state.LogTailerParams {
 	return params
 }
 
-func formatLogRecord(r *state.LogRecord) string {
-	return fmt.Sprintf("%s: %s %s %s %s %s\n",
-		r.Entity,
-		formatTime(r.Time),
-		r.Level.String(),
-		r.Module,
-		r.Location,
-		r.Message,
-	)
+func formatLogRecord(r *state.LogRecord, jsonFormat bool) (string, error) {
+	if !jsonFormat {
+		return fmt.Sprintf("%s: %s %s %s %s %s\n",
+			r.Entity,
+			formatTime(r.Time),
+			r.Level.String(),
+			r.Module,
+			r.Location,
+			r.Message,
+		), nil
+	}
+	data, err := json.Marshal(r)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return string(data), nil
 }
 
 func formatTime(t time.Time) string {
@@ -87,6 +101,6 @@ func formatTime(t time.Time) string {
 
 var newLogTailer = _newLogTailer // For replacing in tests
 
-func _newLogTailer(st state.LoggingState, params *state.LogTailerParams) state.LogTailer {
+func _newLogTailer(st state.LoggingState, params *state.LogTailerParams) (state.LogTailer, error) {
 	return state.NewLogTailer(st, params)
 }

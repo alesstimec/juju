@@ -80,7 +80,7 @@ func (h *debugLogHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			// Validate before authenticate because the authentication is
 			// dependent on the state connection that is determined during the
 			// validation.
-			st, _, err := h.ctxt.stateForRequestAuthenticatedUser(req)
+			st, _, err := h.ctxt.stateForRequestAuthenticated(req)
 			if err != nil {
 				socket.sendError(err)
 				return
@@ -153,6 +153,7 @@ type debugLogParams struct {
 	excludeEntity []string
 	includeModule []string
 	excludeModule []string
+	jsonFormat    bool
 }
 
 func readDebugLogParams(queryMap url.Values) (*debugLogParams, error) {
@@ -180,6 +181,14 @@ func readDebugLogParams(queryMap url.Values) (*debugLogParams, error) {
 			return nil, errors.Errorf("noTail value %q is not a valid boolean", value)
 		}
 		params.noTail = noTail
+	}
+
+	if value := queryMap.Get("jsonFormat"); value != "" {
+		jsonFormat, err := strconv.ParseBool(value)
+		if err != nil {
+			return nil, errors.Errorf("jsonFormat value %q is not a valid boolean", value)
+		}
+		params.jsonFormat = jsonFormat
 	}
 
 	if value := queryMap.Get("backlog"); value != "" {
