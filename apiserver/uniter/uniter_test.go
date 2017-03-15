@@ -2267,6 +2267,15 @@ func (s *uniterSuite) TestAllMachinePorts(c *gc.C) {
 	})
 }
 
+func (s *uniterSuite) TestSLALevel(c *gc.C) {
+	err := s.State.SetSLA("essential", []byte("creds"))
+	c.Assert(err, jc.ErrorIsNil)
+
+	result, err := s.uniter.SLALevel()
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(result, jc.DeepEquals, params.StringResult{Result: "essential"})
+}
+
 type unitMetricBatchesSuite struct {
 	uniterSuite
 	*commontesting.ModelWatcherTest
