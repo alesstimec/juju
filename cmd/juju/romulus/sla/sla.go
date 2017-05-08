@@ -13,6 +13,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/juju/gnuflag"
 	"github.com/juju/romulus/api/sla"
+	slacommon "github.com/juju/romulus/wireformat/common"
 	slawire "github.com/juju/romulus/wireformat/sla"
 	"gopkg.in/macaroon.v1"
 
@@ -114,6 +115,9 @@ func (c *slaCommand) requestSupportCredentials(modelUUID string) (string, []byte
 	}
 	slaResp, err := authClient.Authorize(modelUUID, c.Level, c.Budget)
 	if err != nil {
+		if verr, ok := errors.Cause(err).(slacommon.UserValidationFailedError); ok {
+			return "", nil, errors.Errorf("user validation failed: %v: visit jujucharms.com to set up a valid payment method", verr.Error())
+		}
 		err = common.MaybeTermsAgreementError(err)
 		if termErr, ok := errors.Cause(err).(*common.TermsRequiredError); ok {
 			return "", nil, errors.Trace(termErr.UserErr())

@@ -9,6 +9,7 @@ import (
 	"github.com/juju/cmd"
 	"github.com/juju/cmd/cmdtesting"
 	"github.com/juju/errors"
+	"github.com/juju/romulus/wireformat/common"
 	slawire "github.com/juju/romulus/wireformat/sla"
 	"github.com/juju/testing"
 	jujutesting "github.com/juju/testing"
@@ -100,6 +101,12 @@ func (s supportCommandSuite) TestSupportCommand(c *gc.C) {
 				"personal:10",
 			},
 		}},
+	}, {
+		about:  "user validation error",
+		level:  "standart",
+		budget: "personal:10",
+		apiErr: common.UserValidationFailedError{Message: "silly error"},
+		err:    "user validation failed: silly error: visit jujucharms.com to set up a valid payment method",
 	},
 	}
 	for i, test := range tests {
