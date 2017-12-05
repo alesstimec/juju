@@ -52,11 +52,16 @@ func (r *RegisterMeteredCharm) RunPre(api MeteredDeployAPI, bakeryClient *httpba
 	if !metered {
 		return nil
 	}
+	return errors.Trace(r.RunPreBundle(api, bakeryClient, ctx, deployInfo))
+}
+
+func (r *RegisterMeteredCharm) RunPreBundle(api MeteredDeployAPI, bakeryClient *httpbakery.Client, ctx *cmd.Context, deployInfo DeploymentInfo) error {
 	info := deployInfo.CharmInfo
-	if r.Plan == "" && info.Metrics != nil && !info.Metrics.PlanRequired() {
+	if r.Plan == "" && info != nil && info.Metrics != nil && !info.Metrics.PlanRequired() {
 		return nil
 	}
 
+	var err error
 	if r.Plan == "" && deployInfo.CharmID.URL.Schema == "cs" {
 		r.Plan, err = r.getDefaultPlan(bakeryClient, deployInfo.CharmID.URL.String())
 		if err != nil {

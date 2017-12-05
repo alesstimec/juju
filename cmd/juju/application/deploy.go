@@ -496,6 +496,9 @@ type DeployStep interface {
 	// RunPre runs before the call is made to add the charm to the environment.
 	RunPre(MeteredDeployAPI, *httpbakery.Client, *cmd.Context, DeploymentInfo) error
 
+	// RunPreBundle runs before the call is made to add a bundle charm to the environment.
+	RunPreBundle(MeteredDeployAPI, *httpbakery.Client, *cmd.Context, DeploymentInfo) error
+
 	// RunPost runs after the call is made to add the charm to the environment.
 	// The error parameter is used to notify the step of a previously occurred error.
 	RunPost(MeteredDeployAPI, *httpbakery.Client, *cmd.Context, DeploymentInfo, error) error
@@ -640,7 +643,51 @@ func (c *DeployCommand) deployBundle(
 	channel params.Channel,
 	apiRoot DeployAPI,
 	bundleStorage map[string]map[string]storage.Constraints,
-) error {
+) (rErr error) {
+	bakeryClient, err := c.BakeryClient()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	modelUUID, ok := apiRoot.ModelUUID()
+	if !ok {
+		return errors.New("API connection is controller-only (should never happen)")
+	}
+
+	for application, applicationSpec := range data.Applications {
+		if applicationSpec.Plan != "" {
+			for _, step := range c.Steps {
+				registrationStep, ok := step.(*RegisterMeteredCharm)
+				if ok && applicationSpec.Plan != "default" {
+					registrationStep.Plan = applicationSpec.Plan
+					step = registrationStep
+				}
+
+				charmURL, err := charm.ParseURL(applicationSpec.Charm)
+				if err != nil {
+					return errors.Trace(err)
+				}
+
+				deployInfo := DeploymentInfo{
+					CharmID:         charmstore.CharmID{URL: charmURL},
+					ApplicationName: application,
+					ModelUUID:       modelUUID,
+				}
+
+				err = step.RunPreBundle(apiRoot, bakeryClient, ctx, deployInfo)
+				if err != nil {
+					return errors.Trace(err)
+				}
+
+				defer func() {
+					err = errors.Trace(step.RunPost(apiRoot, bakeryClient, ctx, deployInfo, rErr))
+					if err != nil {
+						rErr = err
+					}
+				}()
+			}
+		}
+	}
+
 	// TODO(ericsnow) Do something with the CS macaroons that were returned?
 	if _, err := deployBundle(
 		filePath,
