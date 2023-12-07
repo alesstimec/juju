@@ -6,6 +6,7 @@ package apiserver
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/go-macaroon-bakery/macaroon-bakery/v3/bakery"
 	"github.com/go-macaroon-bakery/macaroon-bakery/v3/bakery/checkers"
@@ -15,7 +16,9 @@ import (
 	"github.com/juju/juju/apiserver/apiserverhttp"
 	"github.com/juju/juju/apiserver/bakeryutil"
 	"github.com/juju/juju/apiserver/common/crossmodel"
+	apiservererrors "github.com/juju/juju/apiserver/errors"
 	"github.com/juju/juju/core/macaroon"
+	coremacaroon "github.com/juju/juju/core/macaroon"
 	"github.com/juju/juju/state"
 )
 
@@ -94,9 +97,50 @@ func (h *localOfferAuthHandler) checkThirdPartyCaveat(stdctx context.Context, re
 		return nil, errors.Trace(err)
 	}
 
-	firstPartyCaveats, err := h.authCtx.CheckLocalAccessRequest(details)
-	if err != nil {
-		return nil, errors.Trace(err)
+	declared := make(map[string]string)
+	macaroons := httpbakery.RequestMacaroons(req)
+	for _, mac := range macaroons {
+		d := checkers.InferDeclared(coremacaroon.MacaroonNamespace, mac)
+		for k, v := range d {
+			declared[k] = v
+		}
+	}
+	logger.Debugf("check macaroons with declared attrs: %v", declared)
+
+	consumer, ok := declared["consumer"]
+	if !ok || consumer != details.User {
+		m, err := bakery.NewMacaroon(
+			stdctx,
+			bakery.Version3,
+			[]checkers.Caveat{
+				checkers.NeedDeclaredCaveat(
+					checkers.Caveat{
+						Location:  "JIMM DISCHARGE URL",
+						Condition: "is-consumer " + details.User,
+					},
+					"consumer",
+				),
+				checkers.TimeBeforeCaveat(time.Now().Add(someexpirytime)),
+			}, op)
+
+		if err != nil {
+			return nil, err
+		}
+		return nil, &apiservererrors.DischargeRequiredError{
+			Cause:          errors.New("some error"),
+			Macaroon:       m,
+			LegacyMacaroon: m.M(),
+		}
+	}
+
+	firstPartyCaveats := []checkers.Caveat{
+		checkers.DeclaredCaveat(sourcemodelKey, details.SourceModelUUID),
+		checkers.DeclaredCaveat(offeruuidKey, details.OfferUUID),
+		checkers.DeclaredCaveat(usernameKey, details.User),
+		checkers.TimeBeforeCaveat(a.clock.Now().Add(localOfferPermissionExpiryTime)),
+	}
+	if details.Relation != "" {
+		firstPartyCaveats = append(firstPartyCaveats, checkers.DeclaredCaveat(relationKey, details.Relation))
 	}
 	return firstPartyCaveats, nil
 }
