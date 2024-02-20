@@ -27,6 +27,11 @@ type SimpleConfig struct {
 	Username  string
 	Password  string
 	Macaroons []macaroon.Slice
+
+	// ClientID and ClientSecret represent the client credentials
+	// created with the IdP.
+	ClientID     string
+	ClientSecret string
 }
 
 // A SimpleConnector can provide connections from a simple set of options.
@@ -53,10 +58,20 @@ func NewSimple(opts SimpleConfig, dialOptions ...api.DialOption) (*SimpleConnect
 	if err := info.Validate(); err != nil {
 		return nil, err
 	}
+
+	dialOpts := api.DefaultDialOpts()
+	if opts.ClientID != "" && opts.ClientSecret != "" {
+		dialOpts.LoginProvider = api.NewClientCredentialsLoginProvider(
+			opts.ClientID,
+			opts.ClientSecret,
+		)
+	}
+
 	conn := &SimpleConnector{
 		info:            info,
-		defaultDialOpts: api.DefaultDialOpts(),
+		defaultDialOpts: dialOpts,
 	}
+
 	for _, f := range dialOptions {
 		f(&conn.defaultDialOpts)
 	}

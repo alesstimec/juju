@@ -247,15 +247,15 @@ func (c *changePasswordCommand) updateUserPassword(ctx *cmd.Context) error {
 }
 
 func (c *changePasswordCommand) recordMacaroon(password string) error {
-	accountDetails := &jujuclient.AccountDetails{User: c.accountDetails.User}
+	controllerAccount := jujuclient.NewUserpassControllerAccount(c.accountDetails.User, "")
 	args, err := c.NewAPIConnectionParams(
-		c.ClientStore(), c.controllerName, "", accountDetails,
+		c.ClientStore(), c.controllerName, "", controllerAccount,
 	)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	args.DialOpts.BakeryClient.InteractionMethods = []httpbakery.Interactor{
-		authentication.NewInteractor(accountDetails.User, func(string) (string, error) {
+		authentication.NewInteractor(c.accountDetails.User, func(string) (string, error) {
 			return password, nil
 		}),
 		httpbakery.WebBrowserInteractor{},

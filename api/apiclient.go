@@ -30,8 +30,6 @@ import (
 	"github.com/juju/names/v5"
 	"github.com/juju/utils/v3"
 	"github.com/juju/utils/v3/parallel"
-	"github.com/juju/version/v2"
-	"gopkg.in/macaroon.v2"
 	"gopkg.in/retry.v1"
 
 	"github.com/juju/juju/api/base"
@@ -63,102 +61,6 @@ type rpcConnection interface {
 	Call(req rpc.Request, params, response interface{}) error
 	Dead() <-chan struct{}
 	Close() error
-}
-
-// state is the internal implementation of the Connection interface.
-type state struct {
-	ctx    context.Context
-	client rpcConnection
-	conn   jsoncodec.JSONConn
-	clock  clock.Clock
-
-	// addr is the address used to connect to the API server.
-	addr string
-
-	// ipAddr is the IP address used to connect to the API server.
-	ipAddr string
-
-	// cookieURL is the URL that HTTP cookies for the API
-	// will be associated with (specifically macaroon auth cookies).
-	cookieURL *url.URL
-
-	// modelTag holds the model tag.
-	// It is empty if there is no model tag associated with the connection.
-	modelTag names.ModelTag
-
-	// controllerTag holds the controller's tag once we're connected.
-	controllerTag names.ControllerTag
-
-	// serverVersion holds the version of the API server that we are
-	// connected to.  It is possible that this version is 0 if the
-	// server does not report this during login.
-	serverVersion version.Number
-
-	// hostPorts is the API server addresses returned from Login,
-	// which the client may cache and use for fail-over.
-	hostPorts []network.MachineHostPorts
-
-	// publicDNSName is the public host name returned from Login
-	// which the client can use to make a connection verified
-	// by an officially signed certificate.
-	publicDNSName string
-
-	// facadeVersions holds the versions of all facades as reported by
-	// Login
-	facadeVersions map[string][]int
-
-	// pingFacadeVersion is the version to use for the pinger. This is lazily
-	// set at initialization to avoid a race in our tests. See
-	// http://pad.lv/1614732 for more details regarding the race.
-	pingerFacadeVersion int
-
-	// authTag holds the authenticated entity's tag after login.
-	authTag names.Tag
-
-	// mpdelAccess holds the access level of the user to the connected model.
-	modelAccess string
-
-	// controllerAccess holds the access level of the user to the connected controller.
-	controllerAccess string
-
-	// broken is a channel that gets closed when the connection is
-	// broken.
-	broken chan struct{}
-
-	// closed is a channel that gets closed when State.Close is called.
-	closed chan struct{}
-
-	// loggedIn holds whether the client has successfully logged
-	// in. It's a int32 so that the atomic package can be used to
-	// access it safely.
-	loggedIn int32
-
-	// tag, password, macaroons and nonce hold the cached login
-	// credentials. These are only valid if loggedIn is 1.
-	tag       string
-	password  string
-	macaroons []macaroon.Slice
-	nonce     string
-
-	// serverRootAddress holds the cached API server address and port used
-	// to login.
-	serverRootAddress string
-
-	// serverScheme is the URI scheme of the API Server
-	serverScheme string
-
-	// tlsConfig holds the TLS config appropriate for making SSL
-	// connections to the API endpoints.
-	tlsConfig *tls.Config
-
-	// bakeryClient holds the client that will be used to
-	// authorize macaroon based login requests.
-	bakeryClient *httpbakery.Client
-
-	// proxier is the proxier used for this connection when not nil. If's expected
-	// the proxy has already been started when placing in this var. This struct
-	// will take the responsibility of closing the proxy.
-	proxier jujuproxy.Proxier
 }
 
 // RedirectError is returned from Open when the controller
@@ -253,6 +155,11 @@ func Open(info *Info, opts DialOpts) (Connection, error) {
 		return nil, errors.Errorf("pinger facade version is required")
 	}
 
+	loginProvider := opts.LoginProvider
+	if loginProvider == nil {
+		loginProvider = NewUserpassLoginProvider(info.Tag, info.Password, info.Nonce, info.Macaroons, bakeryClient, CookieURLFromHost(host))
+	}
+
 	st := &state{
 		ctx:                 context.Background(),
 		client:              client,
@@ -268,14 +175,15 @@ func Open(info *Info, opts DialOpts) (Connection, error) {
 		// login because, when doing HTTP requests, we'll want
 		// to use the same username and password for authenticating
 		// those. If login fails, we discard the connection.
-		tag:          tagToString(info.Tag),
-		password:     info.Password,
-		macaroons:    info.Macaroons,
-		nonce:        info.Nonce,
-		tlsConfig:    dialResult.tlsConfig,
-		bakeryClient: bakeryClient,
-		modelTag:     info.ModelTag,
-		proxier:      dialResult.proxier,
+		tag:           tagToString(info.Tag),
+		password:      info.Password,
+		macaroons:     info.Macaroons,
+		nonce:         info.Nonce,
+		tlsConfig:     dialResult.tlsConfig,
+		bakeryClient:  bakeryClient,
+		modelTag:      info.ModelTag,
+		proxier:       dialResult.proxier,
+		loginProvider: loginProvider,
 	}
 	if !info.SkipLogin {
 		if err := loginWithContext(dialCtx, st, info); err != nil {
@@ -329,7 +237,19 @@ func PerferredHost(info *Info) string {
 func loginWithContext(ctx context.Context, st *state, info *Info) error {
 	result := make(chan error, 1)
 	go func() {
-		result <- st.Login(info.Tag, info.Password, info.Nonce, info.Macaroons)
+		// if loginProvider is not specified we use the default login provider
+		// which logs in using username/password or macaroons.
+		if st.loginProvider == nil {
+			result <- errors.Errorf("login provider not specified")
+		}
+
+		loginResult, err := st.loginProvider.Login(ctx, st)
+		if err != nil {
+			result <- err
+			return
+		}
+
+		result <- st.setLoginResult(loginResult)
 	}()
 	select {
 	case err := <-result:

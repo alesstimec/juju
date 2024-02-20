@@ -202,18 +202,18 @@ func (c *loginCommand) run(ctx *cmd.Context) error {
 	var (
 		conn                    api.Connection
 		publicControllerDetails *jujuclient.ControllerDetails
-		accountDetails          *jujuclient.AccountDetails
-		oldAccountDetails       *jujuclient.AccountDetails
+		controllerAccount       *jujuclient.ControllerAccount
+		oldControllerAccount    *jujuclient.ControllerAccount
 		err                     error
 	)
 	if controllerDetails != nil {
 		// Fetch current details for the specified controller name so we
 		// can tell if the logged in user has changed.
-		d, err := store.AccountDetails(c.controllerName)
+		d, err := store.ControllerAccount(c.controllerName)
 		if err != nil && !errors.IsNotFound(err) {
 			return errors.Trace(err)
 		}
-		oldAccountDetails = d
+		oldControllerAccount = d
 	}
 	switch {
 	case c.domain != "":
@@ -225,7 +225,7 @@ func (c *loginCommand) run(ctx *cmd.Context) error {
 
 		// Note: the controller name is guaranteed to be non-empty
 		// in this case via the test at the start of this function.
-		conn, publicControllerDetails, accountDetails, err = c.publicControllerLogin(ctx, c.domain, c.controllerName, oldAccountDetails)
+		conn, publicControllerDetails, controllerAccount, err = c.publicControllerLogin(ctx, c.domain, c.controllerName, oldControllerAccount)
 		if err != nil {
 			return errors.Annotatef(err, "cannot log into %q", c.domain)
 		}
@@ -236,7 +236,7 @@ func (c *loginCommand) run(ctx *cmd.Context) error {
 	case controllerDetails == nil:
 		return errors.Errorf("no current controller")
 	default:
-		conn, accountDetails, err = c.existingControllerLogin(ctx, store, c.controllerName, oldAccountDetails)
+		conn, controllerAccount, err = c.existingControllerLogin(ctx, store, c.controllerName, oldControllerAccount)
 		if err != nil {
 			return errors.Annotatef(err, "cannot log into controller %q", c.controllerName)
 		}
@@ -259,21 +259,22 @@ use "juju unregister %s" to remove the existing controller.`[1:], c.domain, c.co
 			return errors.Trace(err)
 		}
 	}
-	accountDetails.LastKnownAccess = conn.ControllerAccess()
-	if err := store.UpdateAccount(c.controllerName, *accountDetails); err != nil {
+	controllerAccount.LastKnownAccess = conn.ControllerAccess()
+	if err := store.UpdateControllerAccount(c.controllerName, *controllerAccount); err != nil {
 		return errors.Annotatef(err, "cannot update account information: %v", err)
 	}
 	if err := store.SetCurrentController(c.controllerName); err != nil {
 		return errors.Annotatef(err, "cannot switch")
 	}
-	if controllerDetails != nil && oldAccountDetails != nil && oldAccountDetails.User == accountDetails.User {
+	if controllerDetails != nil && oldControllerAccount != nil && oldControllerAccount.Get(jujuclient.UsernameControllerAccountKey) == controllerAccount.Get(jujuclient.UsernameControllerAccountKey) {
 		// We're still using the same controller and the same user name,
 		// so no need to list models or set the current controller
 		return nil
 	}
 	// Now list the models available so we can show them and store their
 	// details locally.
-	models, err := listModels(conn, accountDetails.User)
+	username := controllerAccount.Get(jujuclient.UsernameControllerAccountKey)
+	models, err := listModels(conn, username)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -282,20 +283,20 @@ use "juju unregister %s" to remove the existing controller.`[1:], c.domain, c.co
 	}
 	fmt.Fprintf(
 		ctx.Stderr, "Welcome, %s. You are now logged into %q.\n",
-		friendlyUserName(accountDetails.User), c.controllerName,
+		friendlyUserName(username), c.controllerName,
 	)
-	return c.maybeSetCurrentModel(ctx, store, c.controllerName, accountDetails.User, models)
+	return c.maybeSetCurrentModel(ctx, store, c.controllerName, username, models)
 }
 
-func (c *loginCommand) existingControllerLogin(ctx *cmd.Context, store jujuclient.ClientStore, controllerName string, currentAccountDetails *jujuclient.AccountDetails) (api.Connection, *jujuclient.AccountDetails, error) {
-	dial := func(accountDetails *jujuclient.AccountDetails) (api.Connection, error) {
-		args, err := c.NewAPIConnectionParams(store, controllerName, "", accountDetails)
+func (c *loginCommand) existingControllerLogin(ctx *cmd.Context, store jujuclient.ClientStore, controllerName string, currentControllerAccount *jujuclient.ControllerAccount) (api.Connection, *jujuclient.ControllerAccount, error) {
+	dial := func(controllerAccount *jujuclient.ControllerAccount) (api.Connection, error) {
+		args, err := c.NewAPIConnectionParams(store, controllerName, "", controllerAccount)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		return newAPIConnection(args)
 	}
-	return c.login(ctx, currentAccountDetails, dial)
+	return c.login(ctx, currentControllerAccount, dial)
 }
 
 // publicControllerLogin logs into the public controller at the given
@@ -305,9 +306,9 @@ func (c *loginCommand) publicControllerLogin(
 	ctx *cmd.Context,
 	host string,
 	controllerName string,
-	currentAccountDetails *jujuclient.AccountDetails,
-) (api.Connection, *jujuclient.ControllerDetails, *jujuclient.AccountDetails, error) {
-	fail := func(err error) (api.Connection, *jujuclient.ControllerDetails, *jujuclient.AccountDetails, error) {
+	currentControllerAccount *jujuclient.ControllerAccount,
+) (api.Connection, *jujuclient.ControllerDetails, *jujuclient.ControllerAccount, error) {
+	fail := func(err error) (api.Connection, *jujuclient.ControllerDetails, *jujuclient.ControllerAccount, error) {
 		return nil, nil, nil, err
 	}
 	if !strings.ContainsAny(host, ".:") {
@@ -349,16 +350,16 @@ func (c *loginCommand) publicControllerLogin(
 		existing = append(existing, i)
 	}
 
-	dial := func(d *jujuclient.AccountDetails) (api.Connection, error) {
+	dial := func(d *jujuclient.ControllerAccount) (api.Connection, error) {
 		// Attach an interactor which will be invoked if we attempt to
 		//login without a password and the remote controller does not
 		//support an external identity provider.
 		var tag names.Tag
-		if d.User != "" {
-			tag = names.NewUserTag(d.User)
+		if d.Get(jujuclient.UsernameControllerAccountKey) != "" {
+			tag = names.NewUserTag(d.Get(jujuclient.UsernameControllerAccountKey))
 		}
 		dialOpts.BakeryClient.InteractionMethods = []httpbakery.Interactor{
-			authentication.NewInteractor(d.User, func(string) (string, error) {
+			authentication.NewInteractor(d.Get(jujuclient.UsernameControllerAccountKey), func(string) (string, error) {
 				if c.noPrompt {
 					if c.noPromptPassword != "" {
 						return c.noPromptPassword, nil
@@ -391,12 +392,12 @@ func (c *loginCommand) publicControllerLogin(
 
 		return apiOpen(&c.CommandBase, &api.Info{
 			Tag:         tag,
-			Password:    d.Password,
+			Password:    d.Get(jujuclient.PasswordControllerAccountKey),
 			Addrs:       []string{host},
 			SNIHostName: sniHost,
 		}, dialOpts)
 	}
-	conn, accountDetails, err := c.login(ctx, currentAccountDetails, dial)
+	conn, controllerAccount, err := c.login(ctx, currentControllerAccount, dial)
 	if err != nil {
 		return fail(errors.Trace(err))
 	}
@@ -409,7 +410,7 @@ func (c *loginCommand) publicControllerLogin(
 	}
 
 	ctrlDetails.ControllerUUID = conn.ControllerTag().Id()
-	return conn, ctrlDetails, accountDetails, nil
+	return conn, ctrlDetails, controllerAccount, nil
 }
 
 // login logs into a controller using the given account details by
@@ -422,25 +423,25 @@ func (c *loginCommand) publicControllerLogin(
 // details that it is passed.
 func (c *loginCommand) login(
 	ctx *cmd.Context,
-	accountDetails *jujuclient.AccountDetails,
-	dial func(*jujuclient.AccountDetails) (api.Connection, error),
-) (api.Connection, *jujuclient.AccountDetails, error) {
+	controllerAccount *jujuclient.ControllerAccount,
+	dial func(*jujuclient.ControllerAccount) (api.Connection, error),
+) (api.Connection, *jujuclient.ControllerAccount, error) {
 	username := c.username
-	if c.username != "" && accountDetails != nil && accountDetails.User != c.username {
+	if c.username != "" && controllerAccount != nil && controllerAccount.Get(jujuclient.UsernameControllerAccountKey) != c.username {
 		// The user has specified a different username than the
 		// user we've found in the controller's account details.
 		return nil, nil, errors.Errorf(`already logged in as %s.
 
 Run "juju logout" first before attempting to log in as a different user.`,
-			accountDetails.User)
+			controllerAccount.Get(jujuclient.UsernameControllerAccountKey))
 	}
 
-	if accountDetails != nil && accountDetails.Password != "" {
+	if controllerAccount != nil && controllerAccount.Get(jujuclient.PasswordControllerAccountKey) != "" {
 		// We've been provided some account details that
 		// contain a password, so try that first.
-		conn, err := dial(accountDetails)
+		conn, err := dial(controllerAccount)
 		if err == nil {
-			return conn, accountDetails, nil
+			return conn, controllerAccount, nil
 		}
 		if !errors.IsUnauthorized(err) {
 			return nil, nil, errors.Trace(err)
@@ -448,16 +449,14 @@ Run "juju logout" first before attempting to log in as a different user.`,
 	}
 	if c.username == "" {
 		// No username specified, so try external-user login first.
-		conn, err := dial(&jujuclient.AccountDetails{})
+		conn, err := dial(jujuclient.NewUserpassControllerAccount("", ""))
 		if err == nil {
 			user, ok := conn.AuthTag().(names.UserTag)
 			if !ok {
 				conn.Close()
 				return nil, nil, errors.Errorf("logged in as %v, not a user", conn.AuthTag())
 			}
-			return conn, &jujuclient.AccountDetails{
-				User: user.Id(),
-			}, nil
+			return conn, jujuclient.NewUserpassControllerAccount(user.Id(), ""), nil
 		}
 		if !params.IsCodeNoCreds(err) {
 			return nil, nil, errors.Trace(err)
@@ -481,16 +480,15 @@ Run "juju logout" first before attempting to log in as a different user.`,
 	// Log in without specifying a password in the account details. This
 	// will trigger macaroon-based authentication, which will prompt the
 	// user for their password.
-	accountDetails = &jujuclient.AccountDetails{
-		User: username,
-	}
-	conn, err := dial(accountDetails)
+	controllerAccount = jujuclient.NewUserpassControllerAccount(username, "")
+
+	conn, err := dial(controllerAccount)
 	if err != nil {
 		if strings.Contains(err.Error(), badCred) {
 			err = errors.New(badCred)
 		}
 	}
-	return conn, accountDetails, errors.Trace(err)
+	return conn, controllerAccount, errors.Trace(err)
 }
 
 const badCred = "invalid entity name or password"

@@ -131,6 +131,21 @@ func (mr *MockClientStoreMockRecorder) BootstrapConfigForController(arg0 any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BootstrapConfigForController", reflect.TypeOf((*MockClientStore)(nil).BootstrapConfigForController), arg0)
 }
 
+// ControllerAccount mocks base method.
+func (m *MockClientStore) ControllerAccount(arg0 string) (*jujuclient.ControllerAccount, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ControllerAccount", arg0)
+	ret0, _ := ret[0].(*jujuclient.ControllerAccount)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ControllerAccount indicates an expected call of ControllerAccount.
+func (mr *MockClientStoreMockRecorder) ControllerAccount(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ControllerAccount", reflect.TypeOf((*MockClientStore)(nil).ControllerAccount), arg0)
+}
+
 // ControllerByAPIEndpoints mocks base method.
 func (m *MockClientStore) ControllerByAPIEndpoints(arg0 ...string) (*jujuclient.ControllerDetails, string, error) {
 	m.ctrl.T.Helper()
@@ -269,6 +284,20 @@ func (mr *MockClientStoreMockRecorder) RemoveController(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveController", reflect.TypeOf((*MockClientStore)(nil).RemoveController), arg0)
 }
 
+// RemoveControllerAccount mocks base method.
+func (m *MockClientStore) RemoveControllerAccount(arg0 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveControllerAccount", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveControllerAccount indicates an expected call of RemoveControllerAccount.
+func (mr *MockClientStoreMockRecorder) RemoveControllerAccount(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveControllerAccount", reflect.TypeOf((*MockClientStore)(nil).RemoveControllerAccount), arg0)
+}
+
 // RemoveModel mocks base method.
 func (m *MockClientStore) RemoveModel(arg0, arg1 string) error {
 	m.ctrl.T.Helper()
@@ -365,6 +394,20 @@ func (m *MockClientStore) UpdateController(arg0 string, arg1 jujuclient.Controll
 func (mr *MockClientStoreMockRecorder) UpdateController(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateController", reflect.TypeOf((*MockClientStore)(nil).UpdateController), arg0, arg1)
+}
+
+// UpdateControllerAccount mocks base method.
+func (m *MockClientStore) UpdateControllerAccount(arg0 string, arg1 jujuclient.ControllerAccount) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateControllerAccount", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateControllerAccount indicates an expected call of UpdateControllerAccount.
+func (mr *MockClientStoreMockRecorder) UpdateControllerAccount(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateControllerAccount", reflect.TypeOf((*MockClientStore)(nil).UpdateControllerAccount), arg0, arg1)
 }
 
 // UpdateCredential mocks base method.

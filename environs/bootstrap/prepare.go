@@ -158,7 +158,7 @@ func decorateAndWriteInfo(
 	controllerName, modelName string,
 ) error {
 	qualifiedModelName := jujuclient.JoinOwnerModelName(
-		names.NewUserTag(details.AccountDetails.User),
+		names.NewUserTag(details.ControllerAccount.Get(jujuclient.UsernameControllerAccountKey)),
 		modelName,
 	)
 	if err := store.AddController(controllerName, details.ControllerDetails); err != nil {
@@ -167,7 +167,7 @@ func decorateAndWriteInfo(
 	if err := store.UpdateBootstrapConfig(controllerName, details.BootstrapConfig); err != nil {
 		return errors.Trace(err)
 	}
-	if err := store.UpdateAccount(controllerName, details.AccountDetails); err != nil {
+	if err := store.UpdateControllerAccount(controllerName, details.ControllerAccount); err != nil {
 		return errors.Trace(err)
 	}
 	if err := store.UpdateModel(controllerName, qualifiedModelName, details.ModelDetails); err != nil {
@@ -233,8 +233,9 @@ func prepare(
 	details.CACert = caCert
 	details.ControllerUUID = args.ControllerConfig.ControllerUUID()
 	details.ControllerModelUUID = args.ModelConfig[config.UUIDKey].(string)
-	details.User = environs.AdminUser
-	details.Password = args.AdminSecret
+	details.Type = jujuclient.UserpassControllerAccountType
+	details.Set(jujuclient.UsernameControllerAccountKey, environs.AdminUser)
+	details.Set(jujuclient.PasswordControllerAccountKey, args.AdminSecret)
 	details.LastKnownAccess = string(permission.SuperuserAccess)
 	details.ModelUUID = cfg.UUID()
 	if featureflag.Enabled(feature.Branches) || featureflag.Enabled(feature.Generations) {
@@ -266,6 +267,6 @@ func prepare(
 type prepareDetails struct {
 	jujuclient.ControllerDetails
 	jujuclient.BootstrapConfig
-	jujuclient.AccountDetails
+	jujuclient.ControllerAccount
 	jujuclient.ModelDetails
 }

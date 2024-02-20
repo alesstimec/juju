@@ -15,6 +15,8 @@ import (
 	"github.com/juju/juju/environs/config"
 )
 
+var _ ClientStore = (*MemStore)(nil)
+
 // MemStore is an in-memory implementation of ClientStore.
 type MemStore struct {
 	mu sync.Mutex
@@ -23,6 +25,7 @@ type MemStore struct {
 	CurrentControllerName string
 	Models                map[string]*ControllerModels
 	Accounts              map[string]AccountDetails
+	ControllerAccounts    map[string]ControllerAccount
 	Credentials           map[string]cloud.CloudCredential
 	BootstrapConfig       map[string]BootstrapConfig
 	CookieJars            map[string]*cookiejar.Jar
@@ -32,12 +35,13 @@ type MemStore struct {
 // NewMemStore returns a new MemStore.
 func NewMemStore() *MemStore {
 	return &MemStore{
-		Controllers:     make(map[string]ControllerDetails),
-		Models:          make(map[string]*ControllerModels),
-		Accounts:        make(map[string]AccountDetails),
-		Credentials:     make(map[string]cloud.CloudCredential),
-		BootstrapConfig: make(map[string]BootstrapConfig),
-		CookieJars:      make(map[string]*cookiejar.Jar),
+		Controllers:        make(map[string]ControllerDetails),
+		Models:             make(map[string]*ControllerModels),
+		Accounts:           make(map[string]AccountDetails),
+		ControllerAccounts: make(map[string]ControllerAccount),
+		Credentials:        make(map[string]cloud.CloudCredential),
+		BootstrapConfig:    make(map[string]BootstrapConfig),
+		CookieJars:         make(map[string]*cookiejar.Jar),
 	}
 }
 
@@ -409,6 +413,61 @@ func (c *MemStore) RemoveAccount(controllerName string) error {
 		return errors.NotFoundf("account for controller %s", controllerName)
 	}
 	delete(c.Accounts, controllerName)
+	return nil
+}
+
+// UpdateControllerAccount implements AccountV2Updater.
+func (c *MemStore) UpdateControllerAccount(controllerName string, account ControllerAccount) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if err := ValidateControllerName(controllerName); err != nil {
+		return errors.Trace(err)
+	}
+	if err := account.Validate(); err != nil {
+		return errors.Trace(err)
+	}
+
+	oldAccount, ok := c.ControllerAccounts[controllerName]
+	if ok && c.ImmutableAccount {
+		return nil
+	}
+	// Only update last known access if it has a value.
+	if account.LastKnownAccess == "" {
+		account.LastKnownAccess = oldAccount.LastKnownAccess
+	}
+	c.ControllerAccounts[controllerName] = account
+
+	return nil
+}
+
+// ControllerAccount implements AccountV2Getter.
+func (c *MemStore) ControllerAccount(controllerName string) (*ControllerAccount, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if err := ValidateControllerName(controllerName); err != nil {
+		return nil, err
+	}
+	account, ok := c.ControllerAccounts[controllerName]
+	if !ok {
+		return nil, errors.NotFoundf("account for controller %s", controllerName)
+	}
+	return &account, nil
+}
+
+// RemoveControllerAccount implements AccountV2Remover.
+func (c *MemStore) RemoveControllerAccount(controllerName string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if err := ValidateControllerName(controllerName); err != nil {
+		return err
+	}
+	if _, ok := c.ControllerAccounts[controllerName]; !ok {
+		return errors.NotFoundf("account for controller %s", controllerName)
+	}
+	delete(c.ControllerAccounts, controllerName)
 	return nil
 }
 

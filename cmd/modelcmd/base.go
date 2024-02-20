@@ -223,34 +223,42 @@ func (c *CommandBase) NewAPIRootWithDialOpts(
 	dialOpts *api.DialOpts,
 ) (api.Connection, error) {
 	c.assertRunStarted()
-	accountDetails, err := store.AccountDetails(controllerName)
+
+	controllerAccount, err := store.ControllerAccount(controllerName)
 	if err != nil && !errors.IsNotFound(err) {
 		return nil, errors.Trace(err)
 	}
+
 	// If there are no account details or there's no logged-in
 	// user or the user is external, then trigger macaroon authentication
 	// by using an empty AccountDetails.
-	if accountDetails == nil || accountDetails.User == "" {
-		accountDetails = &jujuclient.AccountDetails{}
+	if controllerAccount == nil || controllerAccount.Get(jujuclient.UsernameControllerAccountKey) == "" {
+		controllerAccount = &jujuclient.ControllerAccount{
+			Type: jujuclient.UserpassControllerAccountType,
+		}
 	} else {
-		u := names.NewUserTag(accountDetails.User)
+		u := names.NewUserTag(controllerAccount.Get(jujuclient.UsernameControllerAccountKey))
 		if !u.IsLocal() {
-			if len(accountDetails.Macaroons) == 0 {
-				accountDetails = &jujuclient.AccountDetails{}
+			macaroons := controllerAccount.Get(jujuclient.MacaroonsControllerAccountKey)
+			if macaroons == "" {
+				controllerAccount = &jujuclient.ControllerAccount{
+					Type: jujuclient.UserpassControllerAccountType,
+				}
 			} else {
 				// If the account has macaroon set, use those to login
 				// to avoid an unnecessary auth round trip.
 				// Used for embedded commands.
-				accountDetails = &jujuclient.AccountDetails{
-					User:      u.Id(),
-					Macaroons: accountDetails.Macaroons,
+				controllerAccount = &jujuclient.ControllerAccount{
+					Type: jujuclient.UserpassControllerAccountType,
 				}
+				controllerAccount.Set(jujuclient.UsernameControllerAccountKey, u.Id())
+				controllerAccount.Set(jujuclient.MacaroonsControllerAccountKey, macaroons)
 			}
 		}
 	}
 
 	param, err := c.NewAPIConnectionParams(
-		store, controllerName, modelName, accountDetails,
+		store, controllerName, modelName, controllerAccount,
 	)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -317,7 +325,7 @@ func (c *CommandBase) missingModelError(store jujuclient.ClientStore, controller
 func (c *CommandBase) NewAPIConnectionParams(
 	store jujuclient.ClientStore,
 	controllerName, modelName string,
-	accountDetails *jujuclient.AccountDetails,
+	controllerAccount *jujuclient.ControllerAccount,
 ) (juju.NewAPIConnectionParams, error) {
 	c.assertRunStarted()
 	bakeryClient, err := c.BakeryClient(store, controllerName)
@@ -339,7 +347,7 @@ func (c *CommandBase) NewAPIConnectionParams(
 
 	return newAPIConnectionParams(
 		store, controllerName, modelName,
-		accountDetails,
+		controllerAccount,
 		c.Embedded,
 		bakeryClient,
 		c.apiOpen,
@@ -558,7 +566,7 @@ func newAPIConnectionParams(
 	store jujuclient.ClientStore,
 	controllerName,
 	modelName string,
-	accountDetails *jujuclient.AccountDetails,
+	controllerAccount *jujuclient.ControllerAccount,
 	embedded bool,
 	bakery *httpbakery.Client,
 	apiOpen api.OpenFunc,
@@ -575,24 +583,33 @@ func newAPIConnectionParams(
 		}
 		modelUUID = modelDetails.ModelUUID
 	}
+
 	dialOpts := api.DefaultDialOpts()
 	dialOpts.BakeryClient = bakery
+	if controllerAccount.Type == jujuclient.OAuth2ControllerAccountType {
+		dialOpts.LoginProvider = api.NewAccessTokenLoginProvider(
+			controllerAccount.Get(jujuclient.AccessTokenControllerAccountKey),
+		)
+	}
 
 	// Embedded clients with macaroons cannot discharge.
-	if accountDetails != nil && !embedded {
+	if controllerAccount != nil && controllerAccount.Type == jujuclient.UserpassControllerAccountType && !embedded {
 		bakery.InteractionMethods = []httpbakery.Interactor{
-			authentication.NewInteractor(accountDetails.User, getPassword),
+			authentication.NewInteractor(
+				controllerAccount.Get(jujuclient.UsernameControllerAccountKey),
+				getPassword,
+			),
 			httpbakery.WebBrowserInteractor{},
 		}
 	}
 
 	return juju.NewAPIConnectionParams{
-		Store:          store,
-		ControllerName: controllerName,
-		AccountDetails: accountDetails,
-		ModelUUID:      modelUUID,
-		DialOpts:       dialOpts,
-		OpenAPI:        OpenAPIFuncWithMacaroons(apiOpen, store, controllerName),
+		Store:             store,
+		ControllerName:    controllerName,
+		ControllerAccount: controllerAccount,
+		ModelUUID:         modelUUID,
+		DialOpts:          dialOpts,
+		OpenAPI:           OpenAPIFuncWithMacaroons(apiOpen, store, controllerName),
 	}, nil
 }
 

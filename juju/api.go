@@ -4,6 +4,7 @@
 package juju
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/juju/loggo"
 	"github.com/juju/names/v5"
+	"gopkg.in/macaroon.v2"
 
 	"github.com/juju/juju/api"
 	"github.com/juju/juju/core/network"
@@ -40,7 +42,11 @@ type NewAPIConnectionParams struct {
 	// in to the Juju API. If this is nil, then no login will take
 	// place. If AccountDetails.Password and AccountDetails.Macaroon
 	// are zero, the login will be as an external user.
-	AccountDetails *jujuclient.AccountDetails
+	//AccountDetails *jujuclient.AccountDetails
+
+	// ControllerAccount contains the controller account details to use
+	// for loggin in to the Juju API.
+	ControllerAccount *jujuclient.ControllerAccount
 
 	// ModelUUID is an optional model UUID. If specified, the API connection
 	// will be scoped to the model with that UUID; otherwise it will be
@@ -199,28 +205,38 @@ func connectionInfo(args NewAPIConnectionParams) (*api.Info, *jujuclient.Control
 	if controller.PublicDNSName != "" {
 		apiInfo.SNIHostName = controller.PublicDNSName
 	}
-	if args.AccountDetails == nil {
+	if args.ControllerAccount == nil {
 		apiInfo.SkipLogin = true
 		return apiInfo, controller, nil
 	}
-	account := args.AccountDetails
-	if account.User != "" {
-		if !names.IsValidUser(account.User) {
-			return nil, nil, errors.NotValidf("user name %q", account.User)
+	account := args.ControllerAccount
+	username := account.Get(jujuclient.UsernameControllerAccountKey)
+	if account.Type == jujuclient.UserpassControllerAccountType && username != "" {
+		if !names.IsValidUser(username) {
+			return nil, nil, errors.NotValidf("user name %q", username)
 		}
-		userTag := names.NewUserTag(account.User)
+		userTag := names.NewUserTag(username)
 		if userTag.IsLocal() {
 			apiInfo.Tag = userTag
 		}
 	}
-	if args.AccountDetails.Password != "" {
+	// TODO (alesstimec) possibly remove this
+	password := account.Get(jujuclient.PasswordControllerAccountKey)
+	if password != "" {
 		// If a password is available, we always use that.
 		// If no password is recorded, we'll attempt to
 		// authenticate using macaroons.
-		apiInfo.Password = account.Password
+		apiInfo.Password = password
 	} else {
 		// Optionally the account may have macaroons to use.
-		apiInfo.Macaroons = account.Macaroons
+		var macaroons []macaroon.Slice
+		macaroonsString := account.Get(jujuclient.MacaroonsControllerAccountKey)
+		if macaroonsString != "" {
+			if err := json.Unmarshal([]byte(macaroonsString), &macaroons); err != nil {
+				return nil, nil, errors.NotValidf("macaroons")
+			}
+			apiInfo.Macaroons = macaroons
+		}
 	}
 	return apiInfo, controller, nil
 }

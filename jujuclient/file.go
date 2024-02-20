@@ -725,7 +725,7 @@ func (s *store) UpdateAccount(controllerName string, details AccountDetails) err
 	return errors.Trace(WriteAccountsFile(accounts))
 }
 
-// AccountByName implements AccountGetter.
+// AccountDetails implements AccountGetter.
 func (s *store) AccountDetails(controllerName string) (*AccountDetails, error) {
 	if err := ValidateControllerName(controllerName); err != nil {
 		return nil, errors.Trace(err)
@@ -774,6 +774,94 @@ func (s *store) RemoveAccount(controllerName string) error {
 
 	delete(accounts, controllerName)
 	return errors.Trace(WriteAccountsFile(accounts))
+}
+
+// UpdateControllerAccount implements AccountV2Updater.
+func (s *store) UpdateControllerAccount(controllerName string, account ControllerAccount) error {
+	if err := ValidateControllerName(controllerName); err != nil {
+		return errors.Trace(err)
+	}
+	if err := account.Validate(); err != nil {
+		return errors.Trace(err)
+	}
+
+	releaser, err := s.acquireLock()
+	if err != nil {
+		return errors.Annotatef(err,
+			"cannot acquire lock file for updating a controller account on controller %s", controllerName,
+		)
+	}
+	defer releaser.Release()
+
+	controllerAccountCollection, err := ReadAccounts2File(JujuAccountsPath())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if controllerAccountCollection.Controllers == nil {
+		controllerAccountCollection.Controllers = make(map[string]interface{})
+	}
+	if oldControllerAccount, err := controllerAccountCollection.ControllerAccount(controllerName); err != nil && reflect.DeepEqual(account, oldControllerAccount) {
+		return nil
+	} else {
+		// Only update last known access if it has a value.
+		if account.LastKnownAccess == "" {
+			account.LastKnownAccess = oldControllerAccount.LastKnownAccess
+		}
+	}
+
+	controllerAccountCollection.Controllers[controllerName] = account
+	return errors.Trace(WriteAccounts2File(controllerAccountCollection))
+}
+
+// ControllerAccount implements AccountV2Getter.
+func (s *store) ControllerAccount(controllerName string) (*ControllerAccount, error) {
+	if err := ValidateControllerName(controllerName); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	releaser, err := s.acquireLock()
+	if err != nil {
+		return nil, errors.Annotatef(err,
+			"cannot acquire lock file for getting an account details on controller %s", controllerName,
+		)
+	}
+	defer releaser.Release()
+
+	controllerAccountCollection, err := ReadAccounts2File(JujuAccountsPath())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	controllerAccount, err := controllerAccountCollection.ControllerAccount(controllerName)
+	if err != nil {
+		return nil, errors.NotFoundf("account for controller %s", controllerName)
+	}
+	return controllerAccount, nil
+}
+
+// RemoveControllerAccount implements AccountV2Remover.
+func (s *store) RemoveControllerAccount(controllerName string) error {
+	if err := ValidateControllerName(controllerName); err != nil {
+		return errors.Trace(err)
+	}
+
+	releaser, err := s.acquireLock()
+	if err != nil {
+		return errors.Annotatef(err,
+			"cannot acquire lock file for removing an account on controller %s", controllerName,
+		)
+	}
+	defer releaser.Release()
+
+	controllerAccountCollection, err := ReadAccounts2File(JujuAccountsPath())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if _, err := controllerAccountCollection.ControllerAccount(controllerName); err != nil {
+		return errors.NotFoundf("account for controller %s", controllerName)
+	}
+
+	delete(controllerAccountCollection.Controllers, controllerName)
+	return errors.Trace(WriteAccounts2File(controllerAccountCollection))
 }
 
 // UpdateCredential implements CredentialUpdater.

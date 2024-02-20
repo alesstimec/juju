@@ -290,6 +290,30 @@ type AccountGetter interface {
 	AccountDetails(controllerName string) (*AccountDetails, error)
 }
 
+// AccountV2Updater stores account details.
+type AccountV2Updater interface {
+	// UpdateControllerAccount updates the account associated with the
+	// given controller.
+	UpdateControllerAccount(controllerName string, account ControllerAccount) error
+}
+
+// AccountV2Remover removes accounts.
+type AccountV2Remover interface {
+	// RemoveControllerAccount removes the account associated with the given controller.
+	// If there is no associated account with the
+	// specified names, an errors satisfying errors.IsNotFound will be
+	// returned.
+	RemoveControllerAccount(controllerName string) error
+}
+
+// AccountV2Getter gets accounts.
+type AccountV2Getter interface {
+	// ControllerAccount returns the account associated with the given
+	// controller name. If no associated account exists, an error
+	// satisfying errors.IsNotFound will be returned.
+	ControllerAccount(controllerName string) (*ControllerAccount, error)
+}
+
 // CredentialGetter gets credentials.
 type CredentialGetter interface {
 	// CredentialForCloud gets credentials for the named cloud.
@@ -367,6 +391,13 @@ type AccountStore interface {
 	AccountGetter
 }
 
+// AccountV2Store is an amalgamation of AccountV2Updater, AccountV2Remover, and AccountV2Getter.
+type AccountsV2Store interface {
+	AccountV2Updater
+	AccountV2Remover
+	AccountV2Getter
+}
+
 // CredentialStore is an amalgamation of CredentialsUpdater, and CredentialsGetter.
 type CredentialStore interface {
 	CredentialGetter
@@ -384,6 +415,7 @@ type BootstrapConfigStore interface {
 // ControllerStore, CredentialStore, and ModelStore.
 type ClientStore interface {
 	AccountStore
+	AccountsV2Store
 	BootstrapConfigStore
 	ControllerStore
 	CredentialStore

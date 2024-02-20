@@ -34,6 +34,11 @@ type StubStore struct {
 	AccountDetailsFunc func(controllerName string) (*jujuclient.AccountDetails, error)
 	RemoveAccountFunc  func(controllerName string) error
 
+	UpdateControllerAccountFunc func(controllerName string, account jujuclient.ControllerAccount) error
+	ControllerAccountFunc       func(controllerName string) (*jujuclient.ControllerAccount, error)
+	RemoveControllerAccountFunc func(controllerName string) error
+	MigrateAccountsFunc         func(accounts map[string]jujuclient.AccountDetails) error
+
 	CredentialForCloudFunc func(string) (*cloud.CloudCredential, error)
 	AllCredentialsFunc     func() (map[string]cloud.CloudCredential, error)
 	UpdateCredentialFunc   func(cloudName string, details cloud.CloudCredential) error
@@ -102,6 +107,19 @@ func NewStubStore() *StubStore {
 		return nil, result.Stub.NextErr()
 	}
 	result.RemoveAccountFunc = func(controllerName string) error {
+		return result.Stub.NextErr()
+	}
+
+	result.UpdateControllerAccountFunc = func(controllerName string, account jujuclient.ControllerAccount) error {
+		return result.Stub.NextErr()
+	}
+	result.ControllerAccountFunc = func(controllerName string) (*jujuclient.ControllerAccount, error) {
+		return nil, result.Stub.NextErr()
+	}
+	result.RemoveControllerAccountFunc = func(controllerName string) error {
+		return result.Stub.NextErr()
+	}
+	result.MigrateAccountsFunc = func(_ map[string]jujuclient.AccountDetails) error {
 		return result.Stub.NextErr()
 	}
 
@@ -262,6 +280,30 @@ func (c *StubStore) AccountDetails(controllerName string) (*jujuclient.AccountDe
 func (c *StubStore) RemoveAccount(controllerName string) error {
 	c.MethodCall(c, "RemoveAccount", controllerName)
 	return c.RemoveAccountFunc(controllerName)
+}
+
+// UpdateAccount implements AccountC2Updater.
+func (c *StubStore) UpdateControllerAccount(controllerName string, account jujuclient.ControllerAccount) error {
+	c.MethodCall(c, "UpdateControllerAccount", controllerName, account)
+	return c.UpdateControllerAccountFunc(controllerName, account)
+}
+
+// AccountDetails implements AccountV2Getter.
+func (c *StubStore) ControllerAccount(controllerName string) (*jujuclient.ControllerAccount, error) {
+	c.MethodCall(c, "ControllerAccount", controllerName)
+	return c.ControllerAccountFunc(controllerName)
+}
+
+// RemoveAccount implements AccountV2Remover.
+func (c *StubStore) RemoveControllerAccount(controllerName string) error {
+	c.MethodCall(c, "RemoveControllerAccount", controllerName)
+	return c.RemoveControllerAccountFunc(controllerName)
+}
+
+// MigrateAccounts implements AccountsV2Store.
+func (c *StubStore) MigrateAccounts(accounts map[string]jujuclient.AccountDetails) error {
+	c.MethodCall(c, "MigrateAccunts", accounts)
+	return c.MigrateAccountsFunc(accounts)
 }
 
 // CredentialForCloud implements CredentialsGetter.
