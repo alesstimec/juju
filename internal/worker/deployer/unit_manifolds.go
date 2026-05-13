@@ -103,6 +103,11 @@ func UnitManifolds(config UnitManifoldsConfig) dependency.Manifolds {
 		return err
 	}
 
+	var containerRunnerName string
+	if len(config.ContainerNames) > 0 {
+		containerRunnerName = iaasContainerRunnerName
+	}
+
 	return dependency.Manifolds{
 
 		// The agent manifold references the enclosing agent, and is the
@@ -248,7 +253,7 @@ func UnitManifolds(config UnitManifoldsConfig) dependency.Manifolds {
 			APICallerName:         apiCallerName,
 			S3CallerName:          s3CallerName,
 			TraceName:             traceName,
-			ContainerRunnerName:   iaasContainerRunnerName,
+			ContainerRunnerName:   containerRunnerName,
 			MachineLock:           config.MachineLock,
 			Clock:                 config.Clock,
 			LeadershipTrackerName: leadershipTrackerName,
