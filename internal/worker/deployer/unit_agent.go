@@ -53,6 +53,7 @@ type UnitAgent struct {
 	unitManifolds      func(UnitManifoldsConfig) dependency.Manifolds
 	prometheusRegistry *prometheus.Registry
 	flightRecorder     flightrecorder.FlightRecorder
+	containerNames     []string
 
 	// Able to disable running units.
 	workerRunning bool
@@ -69,6 +70,7 @@ type UnitAgentConfig struct {
 	UnitEngineConfig func() dependency.EngineConfig
 	UnitManifolds    func(UnitManifoldsConfig) dependency.Manifolds
 	SetupLogging     func(logger.LoggerContext, agent.Config)
+	ContainerNames   []string
 }
 
 // Validate ensures all the required values are set.
@@ -153,6 +155,7 @@ func NewUnitAgent(config UnitAgentConfig) (*UnitAgent, error) {
 		unitManifolds:      config.UnitManifolds,
 		prometheusRegistry: prometheusRegistry,
 		flightRecorder:     config.FlightRecorder,
+		containerNames:     config.ContainerNames,
 	}
 	// Update the 'upgradedToVersion' in the agent.conf file if it is
 	// different to the current version.
@@ -207,6 +210,7 @@ func (a *UnitAgent) start(ctx context.Context) (worker.Worker, error) {
 		UpdateLoggerConfig:  updateAgentConfLogging,
 		MachineLock:         machineLock,
 		Clock:               a.clock,
+		ContainerNames:      a.containerNames,
 	})
 	depEngineConfig := a.unitEngineConfig()
 	// TODO: tweak IsFatal error func, maybe?

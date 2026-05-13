@@ -76,6 +76,10 @@ type UnitManifoldsConfig struct {
 
 	// Clock supplies timekeeping services to various workers.
 	Clock clock.Clock
+
+	// ContainerNames holds the sorted container names from the charm metadata.
+	// If non-empty, the uniter will start PebblePoller for these containers.
+	ContainerNames []string
 }
 
 // UnitManifolds returns a set of co-configured manifolds covering the various
@@ -238,6 +242,7 @@ func UnitManifolds(config UnitManifoldsConfig) dependency.Manifolds {
 			CharmDirName:          charmDirName,
 			HookRetryStrategyName: hookRetryStrategyName,
 			TranslateResolverErr:  uniter.TranslateFortressErrors,
+			ContainerNames:        config.ContainerNames,
 			Logger:                config.LoggerContext.GetLogger("juju.worker.uniter"),
 		})),
 

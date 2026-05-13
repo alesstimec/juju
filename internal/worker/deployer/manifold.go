@@ -66,6 +66,9 @@ func (config ManifoldConfig) newWorker(_ context.Context, a agent.Agent, apiCall
 		UnitEngineConfig: config.UnitEngineConfig,
 		SetupLogging:     config.SetupLogging,
 		UnitManifolds:    UnitManifolds,
+		GetContainerNames: func(ctx context.Context, unitTag names.UnitTag) ([]string, error) {
+			return deployerFacade.UnitContainerNames(ctx, unitTag)
+		},
 	}
 
 	context, err := config.NewDeployContext(contextConfig)
