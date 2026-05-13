@@ -1,5 +1,43 @@
 # Universal Charms — Design Review & Task List
 
+## Implementation Delta (May 2026)
+
+### Verified
+
+- Hook pipeline wiring is present and tested:
+   - `pebble-ready` via `PebblePoller`
+   - `pebble-check-failed` and `pebble-check-recovered` via `PebbleNoticer`
+   - workload event to hook mapping in the uniter workload resolver
+- IAAS runner wiring is in place in unit manifolds with uniter dependency on
+   `iaas-container-runner` when `ContainerNames` is non-empty.
+- Runtime provisioning moved to cloud-init defaults for this POC (`containerd`,
+   `nerdctl`, `pebble`) and validated by cloudconfig unit tests.
+
+### Fixed During Debugging
+
+- Pebble startup crash from incorrect `PEBBLE` env was fixed by using a
+   directory path in the container (`PEBBLE=/charm/container`).
+- Cloud-init shell compatibility issue (`set -o pipefail`) was fixed.
+- Runtime provisioning script was made bounded and best-effort so download
+   failures do not indefinitely block machine agent installation.
+
+### Current Blocker
+
+- Some integration runs were interrupted while unit agent remained
+   `installing agent`. In this state, charm hooks do not run yet, so
+   `pebble services` returning `Plan has no services` is expected.
+
+### Immediate Next Tasks
+
+1. Re-run `tests/suites/universal_charms` without early interruption and wait
+    until unit agent reaches `idle`.
+2. If still stuck in `installing agent`, capture machine cloud-init logs and
+    unit-agent logs from introspection artifacts for root cause.
+3. Once idle, validate event transitions explicitly:
+    - absent `/trigger` => `pebble_check_failed`
+    - create `/trigger` => `pebble_check_recovered`
+    - remove `/trigger` => `pebble_check_failed` again
+
 ## Design Review: Identified Gaps
 
 ### Gap 1: `Sidecar` Flag Interaction

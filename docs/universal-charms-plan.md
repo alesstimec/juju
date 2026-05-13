@@ -21,6 +21,25 @@ and the poller works without any changes.
 multiple units on the same machine do not collide. The `iaascontainerrunner`
 must use `<dataDir>/charm/containers/<name>/` as the bind-mount source.
 
+## Current Verification Status (May 2026)
+
+What has been verified in code and tests:
+
+- The IAAS uniter starts Pebble workers when `ContainerNames` is non-empty.
+- `PebblePoller` emits `<container>-pebble-ready` when Pebble boot ID changes.
+- `PebbleNoticer` maps Pebble `perform-check` and `recover-check` changes to
+    `pebble_check_failed` and `pebble_check_recovered` hooks.
+- The workload hook resolver maps these events to `hooks.PebbleReady`,
+    `hooks.PebbleCheckFailed`, and `hooks.PebbleCheckRecovered`.
+
+What is still pending in integration:
+
+- End-to-end `universal_charms` confirmation in a clean run that reaches
+    unit agent `idle`.
+- Runs interrupted while unit stayed in `installing agent`; in that state the
+    charm has not started yet, so `pebble services` correctly shows
+    "Plan has no services".
+
 ## Background: How CAAS Works Today
 
 - The K8s provider builds a pod spec in `internal/provider/kubernetes/application/application.go`.
@@ -283,46 +302,30 @@ type StorageInfo struct {
 
 ---
 
-### 6. nerdctl Installation and Feature Detection
+### 6. Runtime Installation and Feature Detection
 
-**How nerdctl gets onto the machine:**
+**How runtime tools get onto the machine:**
 
-The `iaacontainerrunner` worker is responsible for ensuring nerdctl is installed
-before running any containers. On first use it runs:
+Runtime prerequisites are installed during machine provisioning in cloud-init,
+not by the worker at runtime.
 
-```bash
-snap install nerdctl
-```
+- Base packages are added (`containerd`, `curl`, `tar`).
+- A provisioning script installs `nerdctl` and `pebble` to
+  `/usr/lib/juju/bin/`.
+- `containerd` is enabled via systemd.
 
-This is idempotent — if nerdctl is already installed, snap reports success without
-reinstalling. The snap bundles `containerd`, `runc`, and `nerdctl` in a single package,
-so no separate containerd installation is required.
+**Important reliability adjustment:**
 
-**Worker startup sequence:**
+The runtime provisioning script is best-effort and bounded. Downloads have
+timeouts/retries, and failures are logged as warnings instead of aborting
+cloud-init. This avoids blocking machine-agent startup in `installing agent`
+when external downloads are slow or unavailable.
 
-1. Check if `nerdctl` is already in PATH (`nerdctl version`).
-2. If not found, run `snap install nerdctl` and wait for it to complete.
-3. If snap install fails (e.g., no snapd, airgapped environment), fail the worker
-   with a clear error that surfaces in `juju status`.
-4. Proceed with container lifecycle management.
+**Worker behavior:**
 
-**Implementation in `iaacontainerrunner/worker.go`:**
-
-```go
-// ensureNerdctl ensures nerdctl is available, installing it via snap if needed.
-func ensureNerdctl(ctx context.Context) error {
-    if err := CheckNerdctlAvailable(); err == nil {
-        return nil // already installed
-    }
-    cmd := exec.CommandContext(ctx, "snap", "install", "nerdctl")
-    if out, err := cmd.CombinedOutput(); err != nil {
-        return errors.Annotatef(err, "snap install nerdctl failed: %s", out)
-    }
-    return CheckNerdctlAvailable()
-}
-```
-
-This is called at the top of `Worker.loop()` before `ensureContainersRunning`.
+The `iaascontainerrunner` now expects a runtime CLI to already exist and only
+detects available `nerdctl` binaries. If none are found, it fails with a clear
+error.
 
 **File: `domain/application/service/provider.go` — `GetSupportedFeatures()`**
 
