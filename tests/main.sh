@@ -81,6 +81,7 @@ TEST_NAMES="actions \
             storage \
             storage_k8s \
             unmanaged \
+			universal_charms \
             upgrade \
             user"
 
