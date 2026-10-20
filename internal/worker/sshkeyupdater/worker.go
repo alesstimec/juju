@@ -4,12 +4,16 @@
 package sshkeyupdater
 
 import (
+	"context"
+
 	"github.com/juju/errors"
+	"github.com/juju/names/v6"
 	"github.com/juju/utils/v4/ssh"
 	"github.com/juju/worker/v5"
 	"github.com/juju/worker/v5/catacomb"
 	gossh "golang.org/x/crypto/ssh"
 
+	"github.com/juju/juju/core/logger"
 	coremachineauthentication "github.com/juju/juju/core/machineauthentication"
 )
 
@@ -60,17 +64,56 @@ func makeRemoveRequest(key gossh.PublicKey) ephemeralRequest {
 	}
 }
 
-// AuthWorker serialises ephemeral SSH key updates for reverse tunnels.
+// FacadeClient is the subset of the KeyUpdater facade the worker needs.
+type FacadeClient interface {
+	// AuthorisedKeys returns the controller's authorised keys that must be
+	// present on the machine identified by tag.
+	AuthorisedKeys(ctx context.Context, tag names.MachineTag) ([]string, error)
+}
+
+// WorkerConfig holds the dependencies of the sshkeyupdater worker.
+type WorkerConfig struct {
+	// Logger is the logger to use for the worker.
+	Logger logger.Logger
+	// MachineTag is the tag of the machine this agent runs on.
+	MachineTag names.MachineTag
+	// FacadeClient is used to fetch the controller's authorised keys.
+	FacadeClient FacadeClient
+}
+
+// Validate validates the worker configuration.
+func (c WorkerConfig) Validate() error {
+	if c.Logger == nil {
+		return errors.NotValidf("nil Logger")
+	}
+	if c.MachineTag.Id() == "" {
+		return errors.NotValidf("empty MachineTag")
+	}
+	if c.FacadeClient == nil {
+		return errors.NotValidf("nil FacadeClient")
+	}
+	return nil
+}
+
+// AuthWorker keeps the controller's own SSH keys present in the machine's
+// authorized_keys file and serialises ephemeral SSH key updates for reverse
+// tunnels.
 type AuthWorker struct {
 	catacomb catacomb.Catacomb
+	config   WorkerConfig
 
 	// requests carries ephemeral key add/remove operations into the loop.
 	requests chan ephemeralRequest
 }
 
-// NewWorker returns a worker that manages ephemeral SSH keys.
-func NewWorker() (worker.Worker, error) {
+// NewWorker returns a worker that reconciles the controller's SSH keys on
+// start and then manages ephemeral SSH keys.
+func NewWorker(config WorkerConfig) (worker.Worker, error) {
+	if err := config.Validate(); err != nil {
+		return nil, errors.Trace(err)
+	}
 	w := &AuthWorker{
+		config:   config,
 		requests: make(chan ephemeralRequest),
 	}
 	if err := catacomb.Invoke(catacomb.Plan{
@@ -125,6 +168,17 @@ func (a *AuthWorker) enqueue(req ephemeralRequest) error {
 }
 
 func (a *AuthWorker) loop() error {
+	ctx, cancel := a.scopedContext()
+	defer cancel()
+
+	// The controller's keys are reconciled once per start. The worker is
+	// restarted whenever the agent reconnects to a controller, which covers
+	// the post-migration case where the machine must learn the keys of the
+	// controller that now manages it.
+	if err := a.reconcileControllerKeys(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	for {
 		select {
 		case <-a.catacomb.Dying():
@@ -161,4 +215,10 @@ func (a *AuthWorker) handleEphemeralRequest(req ephemeralRequest) error {
 	default:
 		return errors.Errorf("unknown op %v", req.op)
 	}
+}
+
+// scopedContext returns a context that is cancelled when the worker is dying.
+func (a *AuthWorker) scopedContext() (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+	return a.catacomb.Context(ctx), cancel
 }

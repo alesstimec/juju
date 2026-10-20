@@ -35,6 +35,23 @@ run_migrate_authorized_keys() {
 	juju switch "${to_controller}:migrate-keys"
 	check_contains "$(juju ssh-keys)" "$fingerprint"
 
+	# The migrated machine must carry the target controller's own key so
+	# that the target controller can reach it directly (for example during
+	# disaster recovery), and must no longer carry the source controller's.
+	# The machine agent reconciles the key shortly after it reconnects to
+	# the target controller, so poll rather than check once.
+	wait_for_machine_agent_status "0" "started"
+	target_system_key=$(juju controller-config -c "${to_controller}" system-ssh-keys | awk '{print $1" "$2}')
+	source_system_key=$(juju controller-config -c "${from_controller}" system-ssh-keys | awk '{print $1" "$2}')
+	check_migrated_machine_controller_key() {
+		local machine_keys
+		# shellcheck disable=SC2016
+		machine_keys=$(juju ssh -m "${to_controller}:migrate-keys" 0 'cat ~/.ssh/authorized_keys')
+		check_contains "${machine_keys}" "${target_system_key}" &&
+			check_not_contains "${machine_keys}" "${source_system_key}"
+	}
+	retry check_migrated_machine_controller_key 12 5
+
 	destroy_controller "$from_controller"
 }
 

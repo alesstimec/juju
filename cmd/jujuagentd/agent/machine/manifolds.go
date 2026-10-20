@@ -1294,7 +1294,13 @@ func IAASManifolds(config ManifoldsConfig) dependency.Manifolds {
 			Logger:             internallogger.GetLogger("juju.worker.toolsversionchecker"),
 		})),
 
-		sshKeyUpdaterWorkerName: ifNotMigrating(sshkeyupdater.Manifold(sshkeyupdater.Output)),
+		sshKeyUpdaterWorkerName: ifNotMigrating(sshkeyupdater.Manifold(sshkeyupdater.ManifoldConfig{
+			AgentName:       agentName,
+			APICallerName:   apiCallerName,
+			Logger:          internallogger.GetLogger("juju.worker.sshkeyupdater"),
+			NewWorker:       sshkeyupdater.NewWorker,
+			NewFacadeClient: sshkeyupdater.NewFacadeClient,
+		})),
 
 		sshSessionName: ifNotMigrating(sshsession.Manifold(sshsession.ManifoldConfig{
 			AgentName:               agentName,
