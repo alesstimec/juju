@@ -255,3 +255,20 @@ func (s *Service) GetInitialAuthorisedKeysForContainer(ctx context.Context) ([]s
 
 	return append(userKeys, controllerKeys...), nil
 }
+
+// GetControllerAuthorisedKeys returns the controller's own authorised keys.
+// These are the keys the controller uses to reach every machine it manages
+// (for example during disaster recovery) and must be present on each
+// machine regardless of model. Unlike [Service.GetAuthorisedKeysForMachine]
+// no user keys are included. If the controller has no keys, a zero length
+// slice is returned.
+func (s *Service) GetControllerAuthorisedKeys(ctx context.Context) ([]string, error) {
+	ctx, span := trace.Start(ctx, trace.NameFromFunc())
+	defer span.End()
+
+	keys, err := s.controllerKeyProvider.ControllerAuthorisedKeys(ctx)
+	if err != nil {
+		return nil, errors.Errorf("getting controller authorised keys: %w", err)
+	}
+	return keys, nil
+}

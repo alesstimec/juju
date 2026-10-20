@@ -42,6 +42,5 @@ func makeKeyUpdaterAPI(
 	return newKeyUpdaterAPI(
 		getCanRead,
 		ctx.DomainServices().KeyUpdater(),
-		ctx.WatcherRegistry(),
 	), nil
 }

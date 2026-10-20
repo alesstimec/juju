@@ -13,8 +13,6 @@ import (
 	context "context"
 
 	gomock "github.com/canonical/gomock/gomock"
-	machine "github.com/juju/juju/core/machine"
-	watcher "github.com/juju/juju/core/watcher"
 )
 
 // MockKeyUpdaterService is a mock of KeyUpdaterService interface.
@@ -26,9 +24,8 @@ type MockKeyUpdaterService struct {
 
 // MockKeyUpdaterServiceMockRecorder is the mock recorder for MockKeyUpdaterService.
 type MockKeyUpdaterServiceMockRecorder struct {
-	mock                                 *MockKeyUpdaterService
-	getAuthorisedKeysForMachineExpects   []*gomock.Call2_2[context.Context, machine.Name, []string, error]
-	watchAuthorisedKeysForMachineExpects []*gomock.Call2_2[context.Context, machine.Name, watcher.NotifyWatcher, error]
+	mock                               *MockKeyUpdaterService
+	getControllerAuthorisedKeysExpects []*gomock.Call1_2[context.Context, []string, error]
 }
 
 // NewMockKeyUpdaterService creates a new mock instance.
@@ -43,38 +40,20 @@ func (m *MockKeyUpdaterService) EXPECT() *MockKeyUpdaterServiceMockRecorder {
 	return m.recorder
 }
 
-// GetAuthorisedKeysForMachine mocks base method.
-func (m *MockKeyUpdaterService) GetAuthorisedKeysForMachine(arg0 context.Context, arg1 machine.Name) ([]string, error) {
+// GetControllerAuthorisedKeys mocks base method.
+func (m *MockKeyUpdaterService) GetControllerAuthorisedKeys(arg0 context.Context) ([]string, error) {
 	m.ctrl.T.Helper()
-	return gomock.Dispatch2_2(&m.recorder.getAuthorisedKeysForMachineExpects, m.ctrl, m, "GetAuthorisedKeysForMachine", arg0, arg1)
+	return gomock.Dispatch1_2(&m.recorder.getControllerAuthorisedKeysExpects, m.ctrl, m, "GetControllerAuthorisedKeys", arg0)
 }
 
-// GetAuthorisedKeysForMachine indicates an expected call of GetAuthorisedKeysForMachine.
-func (mr *MockKeyUpdaterServiceMockRecorder) GetAuthorisedKeysForMachine(arg0, arg1 any) *MockKeyUpdaterServiceGetAuthorisedKeysForMachineCall {
+// GetControllerAuthorisedKeys indicates an expected call of GetControllerAuthorisedKeys.
+func (mr *MockKeyUpdaterServiceMockRecorder) GetControllerAuthorisedKeys(arg0 any) *MockKeyUpdaterServiceGetControllerAuthorisedKeysCall {
 	mr.mock.ctrl.T.Helper()
-	call := gomock.NewCall2_2[context.Context, machine.Name, []string, error](mr.mock.ctrl.T, mr.mock, "GetAuthorisedKeysForMachine", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1))
-	mr.getAuthorisedKeysForMachineExpects = append(mr.getAuthorisedKeysForMachineExpects, call)
+	call := gomock.NewCall1_2[context.Context, []string, error](mr.mock.ctrl.T, mr.mock, "GetControllerAuthorisedKeys", gomock.EnsureMatcher(arg0))
+	mr.getControllerAuthorisedKeysExpects = append(mr.getControllerAuthorisedKeysExpects, call)
 	mr.mock.ctrl.Track(call.Call)
 	return call
 }
 
-// MockKeyUpdaterServiceGetAuthorisedKeysForMachineCall is the typed call wrapper for GetAuthorisedKeysForMachine.
-type MockKeyUpdaterServiceGetAuthorisedKeysForMachineCall = gomock.Call2_2[context.Context, machine.Name, []string, error]
-
-// WatchAuthorisedKeysForMachine mocks base method.
-func (m *MockKeyUpdaterService) WatchAuthorisedKeysForMachine(arg0 context.Context, arg1 machine.Name) (watcher.NotifyWatcher, error) {
-	m.ctrl.T.Helper()
-	return gomock.Dispatch2_2(&m.recorder.watchAuthorisedKeysForMachineExpects, m.ctrl, m, "WatchAuthorisedKeysForMachine", arg0, arg1)
-}
-
-// WatchAuthorisedKeysForMachine indicates an expected call of WatchAuthorisedKeysForMachine.
-func (mr *MockKeyUpdaterServiceMockRecorder) WatchAuthorisedKeysForMachine(arg0, arg1 any) *MockKeyUpdaterServiceWatchAuthorisedKeysForMachineCall {
-	mr.mock.ctrl.T.Helper()
-	call := gomock.NewCall2_2[context.Context, machine.Name, watcher.NotifyWatcher, error](mr.mock.ctrl.T, mr.mock, "WatchAuthorisedKeysForMachine", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1))
-	mr.watchAuthorisedKeysForMachineExpects = append(mr.watchAuthorisedKeysForMachineExpects, call)
-	mr.mock.ctrl.Track(call.Call)
-	return call
-}
-
-// MockKeyUpdaterServiceWatchAuthorisedKeysForMachineCall is the typed call wrapper for WatchAuthorisedKeysForMachine.
-type MockKeyUpdaterServiceWatchAuthorisedKeysForMachineCall = gomock.Call2_2[context.Context, machine.Name, watcher.NotifyWatcher, error]
+// MockKeyUpdaterServiceGetControllerAuthorisedKeysCall is the typed call wrapper for GetControllerAuthorisedKeys.
+type MockKeyUpdaterServiceGetControllerAuthorisedKeysCall = gomock.Call1_2[context.Context, []string, error]

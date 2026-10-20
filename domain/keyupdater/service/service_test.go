@@ -149,3 +149,30 @@ func (s *serviceSuite) TestGetInitialAuthorisedKeysForContainerFailure(c *tc.C) 
 		GetInitialAuthorisedKeysForContainer(c.Context())
 	c.Check(err, tc.ErrorIs, boom)
 }
+
+// TestGetControllerAuthorisedKeys is testing the happy path of
+// [Service.GetControllerAuthorisedKeys]: only the controller's keys are
+// returned, no user keys.
+func (s *serviceSuite) TestGetControllerAuthorisedKeys(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	s.controllerKeyProvider.EXPECT().ControllerAuthorisedKeys(gomock.Any()).Return(controllerKeys, nil)
+
+	keys, err := NewService(s.controllerKeyProvider, s.controllerState, s.state).
+		GetControllerAuthorisedKeys(c.Context())
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(keys, tc.DeepEquals, controllerKeys)
+}
+
+// TestGetControllerAuthorisedKeysError is testing that errors from the
+// controller key provider are passed back to the caller.
+func (s *serviceSuite) TestGetControllerAuthorisedKeysError(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	boom := errors.New("boom")
+	s.controllerKeyProvider.EXPECT().ControllerAuthorisedKeys(gomock.Any()).Return(nil, boom)
+
+	_, err := NewService(s.controllerKeyProvider, s.controllerState, s.state).
+		GetControllerAuthorisedKeys(c.Context())
+	c.Check(err, tc.ErrorIs, boom)
+}
