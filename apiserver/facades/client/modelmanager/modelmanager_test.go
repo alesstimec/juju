@@ -429,6 +429,18 @@ func (s *modelManagerSuite) TestCreateModelNoDefaultCredentialNonAdmin(c *gc.C) 
 	c.Assert(err, gc.ErrorMatches, "no credential specified")
 }
 
+func (s *modelManagerSuite) TestCreateModelAnotherUsersCredential(c *gc.C) {
+	eve := names.NewUserTag("eve")
+	s.setAPIUser(c, eve)
+	args := params.ModelCreateArgs{
+		Name:               "foo",
+		OwnerTag:           "user-eve",
+		CloudCredentialTag: "cloudcred-some-cloud_bob_bar",
+	}
+	_, err := s.api.CreateModel(args)
+	c.Assert(err, gc.ErrorMatches, `permission denied`)
+}
+
 func (s *modelManagerSuite) TestCreateModelUnknownCredential(c *gc.C) {
 	s.st.SetErrors(nil, errors.NotFoundf("credential"))
 	args := params.ModelCreateArgs{

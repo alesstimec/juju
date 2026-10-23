@@ -411,6 +411,10 @@ func (m *ModelManagerAPI) CreateModel(args params.ModelCreateArgs) (params.Model
 		if err != nil {
 			return result, errors.Trace(err)
 		}
+		// If the user is not a superuser and the credential belongs to another user, deny permission.
+		if !isAdmin && cloudCredentialTag.Owner() != ownerTag {
+			return result, errors.Annotatef(apiservererrors.ErrPerm, "cloud credential not found")
+		}
 	} else {
 		if ownerTag == controllerModel.Owner() {
 			cloudCredentialTag, _ = controllerModel.CloudCredentialTag()
